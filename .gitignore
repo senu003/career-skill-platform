@@ -1,0 +1,37 @@
+# Environment variables
+.env
+*.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache & compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# User uploaded files & data databases
+uploads/
+backend/uploads/
+*.db
+*.sqlite3
+
+# Node dependencies (frontend)
+node_modules/
+dist/
+build/
+
+# IDE / OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
