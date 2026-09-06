@@ -1,5 +1,6 @@
 import os
 import json
+from typing import Optional
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -11,6 +12,22 @@ load_dotenv()
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
+
+
+def normalize_requirement_level(level: Optional[str]) -> str:
+    """
+    Sanitize extracted requirement levels.
+    Maps to canonical basic/intermediate/advanced or defaults to unspecified.
+    """
+    if level is None:
+        return "unspecified"
+        
+    level = str(level).strip().lower()
+    
+    if level in ["basic", "intermediate", "advanced"]:
+        return level
+        
+    return "unspecified"
 
 
 def extract_requirements(text: str):
@@ -72,12 +89,20 @@ Company requirements:
         )
     )
 
+    data = {"requirements": []}
+
     if response.parsed is not None:
-        return response.parsed
+        data = response.parsed
     elif response.text:
         try:
-            return json.loads(response.text)
+            data = json.loads(response.text)
         except Exception:
             pass
+            
+    # Normalize the extracted levels
+    if isinstance(data, dict) and "requirements" in data and isinstance(data["requirements"], list):
+        for req in data["requirements"]:
+            if isinstance(req, dict) and "level" in req:
+                req["level"] = normalize_requirement_level(req["level"])
 
-    return {"requirements": []}
+    return data

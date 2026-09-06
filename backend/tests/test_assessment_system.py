@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.main import app
 from app.database import SessionLocal
 from app.models import AssessmentQuestion, AssessmentAttempt, AssessmentAnswer
+from sqlalchemy import text
 
 
 class TestAssessmentSystem(unittest.TestCase):
@@ -19,6 +20,28 @@ class TestAssessmentSystem(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
+        # Clean up existing user if any
+        self.db.execute(text("DELETE FROM assessment_attempts WHERE user_id = 999"))
+        self.db.execute(text("DELETE FROM users WHERE email = 'test_assessment@example.com'"))
+        self.db.commit()
+
+        # Create user
+        self.client.post("/users", json={
+            "name": "Test User",
+            "email": "test_assessment@example.com",
+            "password": "password123"
+        })
+        
+        # Login
+        login_res = self.client.post("/login", data={
+            "username": "test_assessment@example.com",
+            "password": "password123"
+        })
+        token = login_res.json()["access_token"]
+        self.client.headers = {"Authorization": f"Bearer {token}"}
+        
+        # Get user id
+        self.user_id = self.db.execute(text("SELECT id FROM users WHERE email = 'test_assessment@example.com'")).scalar()
 
     def tearDown(self):
         self.db.close()
@@ -28,7 +51,7 @@ class TestAssessmentSystem(unittest.TestCase):
         response = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
             "required_level": "basic",
-            "user_id": 101
+            "user_id": self.user_id
         })
         self.assertEqual(response.status_code, 201)
         data = response.json()
@@ -54,7 +77,8 @@ class TestAssessmentSystem(unittest.TestCase):
         # Start basic attempt
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
-            "required_level": "basic"
+            "required_level": "basic",
+            "user_id": self.user_id
         }).json()
 
         attempt_id = start_res["attempt_id"]
@@ -62,17 +86,19 @@ class TestAssessmentSystem(unittest.TestCase):
 
         # Submit answer for first question
         q1 = questions[0]
+        q1_db = self.db.query(AssessmentQuestion).filter(AssessmentQuestion.id == q1["id"]).first()
+        correct_ans = q1_db.correct_answer
         sub_res = self.client.post("/assessment/answer", json={
             "attempt_id": attempt_id,
             "question_id": q1["id"],
-            "selected_answer": "C"  # correct answer for JS-B01
+            "selected_answer": correct_ans
         })
         self.assertEqual(sub_res.status_code, 200)
         data = sub_res.json()
 
         self.assertEqual(data["attempt_id"], attempt_id)
         self.assertEqual(data["question_id"], q1["id"])
-        self.assertEqual(data["selected_answer"], "C")
+        self.assertEqual(data["selected_answer"], correct_ans)
         self.assertTrue(data["is_correct"])
 
         # Check DB directly
@@ -81,7 +107,7 @@ class TestAssessmentSystem(unittest.TestCase):
             AssessmentAnswer.question_id == q1["id"]
         ).first()
         self.assertIsNotNone(db_answer)
-        self.assertEqual(db_answer.selected_answer, "C")
+        self.assertEqual(db_answer.selected_answer, correct_ans)
         self.assertTrue(db_answer.is_correct)
 
     def test_06_and_07_level_progression_and_failed_level_stopping(self):
@@ -89,7 +115,8 @@ class TestAssessmentSystem(unittest.TestCase):
         # Start intermediate requirement attempt
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
-            "required_level": "intermediate"
+            "required_level": "intermediate",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
         basic_questions = start_res["questions"]
@@ -135,7 +162,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """8. Verify intermediate requirement does not ask advanced questions."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "React",
-            "required_level": "intermediate"
+            "required_level": "intermediate",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
 
@@ -158,7 +186,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """9. Verify advanced requirement can progress through all three levels."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "PostgreSQL",
-            "required_level": "advanced"
+            "required_level": "advanced",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
 
@@ -180,7 +209,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """10. Verify correct answers are never returned in question API responses."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
-            "required_level": "advanced"
+            "required_level": "advanced",
+            "user_id": self.user_id
         }).json()
 
         def check_no_correct_answer(data_obj):
@@ -201,7 +231,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """11. Verify duplicate answers for the same question are rejected."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
-            "required_level": "basic"
+            "required_level": "basic",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
         q1_id = start_res["questions"][0]["id"]
@@ -227,7 +258,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """12. Verify invalid question IDs are handled."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
-            "required_level": "basic"
+            "required_level": "basic",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
 
@@ -242,7 +274,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """13. Verify invalid answer values such as 'E' are rejected."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
-            "required_level": "basic"
+            "required_level": "basic",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
         q1_id = start_res["questions"][0]["id"]
@@ -258,7 +291,8 @@ class TestAssessmentSystem(unittest.TestCase):
         """14. Verify incomplete assessments cannot be marked completed incorrectly."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "React",
-            "required_level": "basic"
+            "required_level": "basic",
+            "user_id": self.user_id
         }).json()
         attempt_id = start_res["attempt_id"]
 

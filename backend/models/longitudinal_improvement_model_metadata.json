@@ -1,0 +1,290 @@
+{
+  "model_type": "LogisticRegression",
+  "model_version": "1.0.0-synthetic",
+  "training_dataset_identifier": "synthetic_longitudinal_dataset.csv",
+  "random_seed": 42,
+  "target_definition": "improved = 1 if later_total_score > previous_total_score else 0",
+  "raw_features": [
+    "previous_assessed_level",
+    "required_level",
+    "previous_priority",
+    "previous_total_score",
+    "previous_level_gap",
+    "cv_match_score",
+    "previous_is_weakness",
+    "days_between_attempts",
+    "previous_basic_score",
+    "previous_intermediate_score",
+    "previous_advanced_score"
+  ],
+  "transformed_feature_names": [
+    "previous_assessed_level_1",
+    "previous_assessed_level_2",
+    "previous_assessed_level_3",
+    "required_level_1",
+    "required_level_2",
+    "required_level_3",
+    "previous_priority_High",
+    "previous_priority_Low",
+    "previous_priority_Medium",
+    "previous_total_score",
+    "previous_level_gap",
+    "cv_match_score",
+    "previous_is_weakness",
+    "days_between_attempts",
+    "previous_basic_score",
+    "previous_intermediate_score",
+    "previous_advanced_score"
+  ],
+  "excluded_features": [
+    "candidate_id (grouping only)",
+    "skill (prevent memorization)",
+    "all t1 features"
+  ],
+  "candidate_counts": {
+    "total": 250,
+    "train": 200,
+    "test": 50
+  },
+  "sample_counts": {
+    "total": 1038,
+    "train": 834,
+    "test": 204
+  },
+  "split_class_distribution": {
+    "train_candidates": 200,
+    "test_candidates": 50,
+    "train_rows": 834,
+    "test_rows": 204,
+    "train_class_distribution": {
+      "improved_1": 410,
+      "improved_0": 424,
+      "rate_1": 0.49160671462829736
+    },
+    "test_class_distribution": {
+      "improved_1": 95,
+      "improved_0": 109,
+      "rate_1": 0.46568627450980393
+    }
+  },
+  "evaluation_metrics": {
+    "baseline_dummy": {
+      "accuracy": 0.5343137254901961,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "roc_auc": 0.5,
+      "confusion_matrix": [
+        [
+          109,
+          0
+        ],
+        [
+          95,
+          0
+        ]
+      ]
+    },
+    "logistic_regression": {
+      "accuracy": 0.6274509803921569,
+      "precision": 0.5959595959595959,
+      "recall": 0.6210526315789474,
+      "f1": 0.6082474226804123,
+      "roc_auc": 0.6718493481409946,
+      "confusion_matrix": [
+        [
+          69,
+          40
+        ],
+        [
+          36,
+          59
+        ]
+      ]
+    },
+    "random_forest": {
+      "accuracy": 0.6176470588235294,
+      "precision": 0.5752212389380531,
+      "recall": 0.6842105263157895,
+      "f1": 0.625,
+      "roc_auc": 0.6335103814582328,
+      "confusion_matrix": [
+        [
+          61,
+          48
+        ],
+        [
+          30,
+          65
+        ]
+      ]
+    }
+  },
+  "cross_validation_5fold": {
+    "n_splits": 5,
+    "logistic_regression": {
+      "roc_auc_mean": 0.7082855368886366,
+      "roc_auc_std": 0.034875082136401475,
+      "f1_mean": 0.6332309034408815,
+      "f1_std": 0.014646409122164148,
+      "accuracy_mean": 0.6493403939056114,
+      "accuracy_std": 0.02023222828009013
+    },
+    "random_forest": {
+      "roc_auc_mean": 0.6666210940750789,
+      "roc_auc_std": 0.025233894896885208,
+      "f1_mean": 0.6046880085310427,
+      "f1_std": 0.02498391757959469,
+      "accuracy_mean": 0.6175260126347083,
+      "accuracy_std": 0.014035941528112866
+    }
+  },
+  "feature_analysis": {
+    "logistic_regression_coefficients": [
+      {
+        "feature": "previous_advanced_score",
+        "coefficient": -0.5929580480441184
+      },
+      {
+        "feature": "days_between_attempts",
+        "coefficient": 0.5825118098860438
+      },
+      {
+        "feature": "previous_basic_score",
+        "coefficient": 0.5545856568718478
+      },
+      {
+        "feature": "previous_total_score",
+        "coefficient": -0.4149434972841514
+      },
+      {
+        "feature": "previous_assessed_level_2",
+        "coefficient": -0.38235119384668825
+      },
+      {
+        "feature": "previous_level_gap",
+        "coefficient": -0.3403601353293838
+      },
+      {
+        "feature": "required_level_3",
+        "coefficient": 0.2366562869620447
+      },
+      {
+        "feature": "cv_match_score",
+        "coefficient": 0.22272436749720828
+      },
+      {
+        "feature": "previous_assessed_level_3",
+        "coefficient": 0.22133372630370454
+      },
+      {
+        "feature": "previous_assessed_level_1",
+        "coefficient": 0.20751041515676727
+      },
+      {
+        "feature": "previous_priority_High",
+        "coefficient": 0.1999816507586337
+      },
+      {
+        "feature": "previous_intermediate_score",
+        "coefficient": -0.1830434700352889
+      },
+      {
+        "feature": "required_level_2",
+        "coefficient": -0.14842630786351055
+      },
+      {
+        "feature": "previous_priority_Medium",
+        "coefficient": -0.13100659134349732
+      },
+      {
+        "feature": "previous_is_weakness",
+        "coefficient": 0.0787584092229917
+      },
+      {
+        "feature": "required_level_1",
+        "coefficient": -0.041737031484752905
+      },
+      {
+        "feature": "previous_priority_Low",
+        "coefficient": -0.022482111801355734
+      }
+    ],
+    "random_forest_importances": [
+      {
+        "feature": "days_between_attempts",
+        "importance": 0.19751012273637844
+      },
+      {
+        "feature": "previous_intermediate_score",
+        "importance": 0.15914271441725292
+      },
+      {
+        "feature": "previous_advanced_score",
+        "importance": 0.14703328910204408
+      },
+      {
+        "feature": "previous_total_score",
+        "importance": 0.14257781408589598
+      },
+      {
+        "feature": "cv_match_score",
+        "importance": 0.1367864012819348
+      },
+      {
+        "feature": "previous_basic_score",
+        "importance": 0.13527599219362585
+      },
+      {
+        "feature": "required_level_2",
+        "importance": 0.013456336042006935
+      },
+      {
+        "feature": "required_level_3",
+        "importance": 0.010930556803957532
+      },
+      {
+        "feature": "required_level_1",
+        "importance": 0.010735081566863163
+      },
+      {
+        "feature": "previous_level_gap",
+        "importance": 0.009448854913249639
+      },
+      {
+        "feature": "previous_priority_Low",
+        "importance": 0.0068118499181865745
+      },
+      {
+        "feature": "previous_assessed_level_3",
+        "importance": 0.0064514862594148735
+      },
+      {
+        "feature": "previous_priority_Medium",
+        "importance": 0.006005285276759059
+      },
+      {
+        "feature": "previous_is_weakness",
+        "importance": 0.005998063156131919
+      },
+      {
+        "feature": "previous_assessed_level_1",
+        "importance": 0.004081121202886626
+      },
+      {
+        "feature": "previous_priority_High",
+        "importance": 0.003976954315597484
+      },
+      {
+        "feature": "previous_assessed_level_2",
+        "importance": 0.003778076727814207
+      }
+    ]
+  },
+  "synthetic_data_sanity_check": {
+    "roc_auc_lr": 0.6718493481409946,
+    "roc_auc_rf": 0.6335103814582328,
+    "sanity_assessment": "MODERATE / REALISTIC EXPERIMENTAL RANGE (ROC-AUC ~0.70-0.85). No trivial shortcut encoding detected."
+  },
+  "synthetic_data_warning": "EXPERIMENTAL MODEL TRAINED STRICTLY ON SYNTHETIC DATA. DO NOT USE IN PRODUCTION OR CLAIM REAL-WORLD ACCURACY."
+}

@@ -15,6 +15,7 @@ from app.services.skill_analysis_service import (
     combine_cv_and_assessment,
     get_assessment_result_for_skill
 )
+from sqlalchemy import text
 
 
 class TestSkillAnalysisConnection(unittest.TestCase):
@@ -25,6 +26,28 @@ class TestSkillAnalysisConnection(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
+        # Clean up existing user if any
+        self.db.execute(text("DELETE FROM assessment_attempts WHERE user_id = 202"))
+        self.db.execute(text("DELETE FROM users WHERE email = 'test_skill@example.com'"))
+        self.db.commit()
+
+        # Create user
+        self.client.post("/users", json={
+            "name": "Test Skill User",
+            "email": "test_skill@example.com",
+            "password": "password123"
+        })
+        
+        # Login
+        login_res = self.client.post("/login", data={
+            "username": "test_skill@example.com",
+            "password": "password123"
+        })
+        token = login_res.json()["access_token"]
+        self.client.headers = {"Authorization": f"Bearer {token}"}
+        
+        # Get user id
+        self.user_id = self.db.execute(text("SELECT id FROM users WHERE email = 'test_skill@example.com'")).scalar()
 
     def tearDown(self):
         self.db.close()
@@ -188,7 +211,7 @@ class TestSkillAnalysisConnection(unittest.TestCase):
     def test_08_get_assessment_result_api_and_db(self):
         """8. Verify DB querying and endpoint for assessment result with level_gap."""
         attempt = AssessmentAttempt(
-            user_id=202,
+            user_id=self.user_id,
             skill="JavaScript",
             required_level="advanced",
             cv_level=None,
@@ -201,7 +224,7 @@ class TestSkillAnalysisConnection(unittest.TestCase):
         self.db.refresh(attempt)
 
         # Verify DB query service
-        res = get_assessment_result_for_skill(self.db, "JavaScript", user_id=202)
+        res = get_assessment_result_for_skill(self.db, "JavaScript", user_id=self.user_id)
         self.assertIsNotNone(res)
         self.assertEqual(res["attempt_id"], attempt.id)
         self.assertEqual(res["skill"], "JavaScript")
@@ -210,7 +233,7 @@ class TestSkillAnalysisConnection(unittest.TestCase):
         self.assertEqual(res["level_gap"], 1)
 
         # Verify GET /assessment/result/{skill} API
-        api_res = self.client.get(f"/assessment/result/JavaScript?user_id=202")
+        api_res = self.client.get(f"/assessment/result/JavaScript?user_id={self.user_id}")
         self.assertEqual(api_res.status_code, 200)
         data = api_res.json()
         self.assertEqual(data["attempt_id"], attempt.id)

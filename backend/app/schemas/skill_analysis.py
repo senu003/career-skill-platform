@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class AssessmentResultSchema(BaseModel):
@@ -8,9 +8,18 @@ class AssessmentResultSchema(BaseModel):
     required_level: str = Field(..., description="Required skill level")
     assessed_level: Optional[str] = Field(None, description="Assessed candidate skill level")
     level_gap: Optional[int] = Field(None, description="Calculated skill level gap")
+    total_score: Optional[float] = Field(None, description="Calculated total score")
+    is_weakness: bool = Field(False, description="Whether this skill is identified as a weakness")
+    weakness_reason: str = Field("NONE", description="Reason for weakness classification")
+    priority: Optional[str] = Field(None, description="Priority for recommendation")
+    recommendation: Optional[str] = Field(None, description="Recommended action")
+    recommendation_reason: Optional[str] = Field(None, description="Explanation for recommendation")
+    skill_recommendation: Optional[str] = Field(None, description="Model 1 skill evaluator recommendation")
+    recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 1 confidence score")
+    improvement_probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted probability of skill improvement based on longitudinal ML model")
+    completed_at: Optional[str] = Field(None, description="ISO timestamp when attempt was completed")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FinalSkillItemSchema(BaseModel):
@@ -23,7 +32,16 @@ class FinalSkillItemSchema(BaseModel):
     assessed_level: Optional[str] = Field(None, description="Assessed level from assessment attempt")
     ml_predicted_level: Optional[str] = Field(None, description="ML predicted proficiency level")
     level_gap: Optional[int] = Field(None, description="Calculated level gap")
+    total_score: Optional[float] = Field(None, description="Calculated total score")
+    is_weakness: bool = Field(False, description="Whether this skill is identified as a weakness")
+    weakness_reason: str = Field("NONE", description="Reason for weakness classification")
+    priority: Optional[str] = Field(None, description="Priority for recommendation")
+    recommendation: Optional[str] = Field(None, description="Recommended action")
+    recommendation_reason: Optional[str] = Field(None, description="Explanation for recommendation")
+    skill_recommendation: Optional[str] = Field(None, description="Model 1 skill evaluator recommendation")
+    recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 1 confidence score")
     evidence: Optional[str] = Field(None, description="Contextual snippet evidence if matched")
+    improvement_probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted probability of skill improvement based on longitudinal ML model")
 
 
 class CombinedAnalysisResponseSchema(BaseModel):
@@ -33,4 +51,8 @@ class CombinedAnalysisResponseSchema(BaseModel):
     missing_skills: List[FinalSkillItemSchema]
     skills: Optional[List[FinalSkillItemSchema]] = None
     score_data: Optional[Dict[str, Any]] = None
+    final_verdict: Optional[str] = Field(None, description="Model 2 final job recommendation verdict")
+    recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 2 confidence score")
+    priority_skills: Optional[List[Dict[str, Any]]] = Field(None, description="Top priority skills requiring candidate attention")
+
 

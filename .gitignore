@@ -35,3 +35,16 @@ build/
 Thumbs.db
 .idea/
 .vscode/
+
+# Internal dev reports & audit docs (generated, not source code)
+STEP_*.md
+ML_*.md
+WEAKNESS_ML_SPEC.md
+backend/STEP_*.md
+
+# Trained ML model binaries (large binary files - regenerate via training scripts)
+backend/models/*.joblib
+
+# Training / synthetic datasets (generated via ML scripts)
+backend/data/*.csv
+backend/app/ml/synthetic/

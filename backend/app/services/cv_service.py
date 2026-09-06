@@ -50,6 +50,7 @@ async def process_cv(file: UploadFile) -> dict:
 
     return {
         "filename": file.filename,
+        "file_path": file_path,
         "pages": pdf_data["pages"],
         "text": pdf_data["text"]
     }

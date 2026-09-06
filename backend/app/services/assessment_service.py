@@ -18,6 +18,17 @@ SUPPORTED_SKILLS = {
 LEVEL_SEQUENCE = ["basic", "intermediate", "advanced"]
 
 
+def get_supported_skills_list() -> List[str]:
+    return ["JavaScript", "React", "PostgreSQL"]
+
+
+def is_skill_supported(skill_input: str) -> bool:
+    if not skill_input:
+        return False
+    cleaned = skill_input.strip().lower()
+    return cleaned in SUPPORTED_SKILLS
+
+
 def normalize_skill(skill_input: str) -> str:
     cleaned = skill_input.strip().lower()
     if cleaned in SUPPORTED_SKILLS:
@@ -29,7 +40,12 @@ def normalize_skill(skill_input: str) -> str:
     return skill_input.strip()
 
 
-def get_allowed_levels(required_level: str) -> List[str]:
+def get_allowed_levels(required_level: Optional[str]) -> List[str]:
+    if not required_level or required_level.strip().lower() == "unspecified":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot start assessment: requirement level is unspecified."
+        )
     req = required_level.lower().strip()
     if req not in LEVEL_SEQUENCE:
         raise HTTPException(
@@ -40,7 +56,13 @@ def get_allowed_levels(required_level: str) -> List[str]:
     return LEVEL_SEQUENCE[: idx + 1]
 
 
-def fetch_questions_for_level(db: Session, skill: str, level: str) -> List[Dict[str, Any]]:
+def fetch_questions_for_level(
+    db: Session,
+    skill: str,
+    level: str,
+    user_id: Optional[int] = None,
+    limit: int = 5
+) -> List[Dict[str, Any]]:
     questions = (
         db.query(AssessmentQuestion)
         .filter(
@@ -48,12 +70,36 @@ def fetch_questions_for_level(db: Session, skill: str, level: str) -> List[Dict[
             func.lower(AssessmentQuestion.level) == level.lower(),
             AssessmentQuestion.is_active == True
         )
-        .order_by(AssessmentQuestion.id.asc())
         .all()
     )
 
+    if not questions:
+        return []
+
+    seen_q_ids = set()
+    if user_id is not None:
+        seen_rows = (
+            db.query(AssessmentAnswer.question_id)
+            .join(AssessmentAttempt, AssessmentAnswer.attempt_id == AssessmentAttempt.id)
+            .filter(AssessmentAttempt.user_id == user_id)
+            .all()
+        )
+        seen_q_ids = {r[0] for r in seen_rows}
+
+    unseen_questions = [q for q in questions if q.id not in seen_q_ids]
+    seen_questions = [q for q in questions if q.id in seen_q_ids]
+
+    import random
+    random.shuffle(unseen_questions)
+    random.shuffle(seen_questions)
+
+    if len(unseen_questions) >= limit:
+        selected = unseen_questions[:limit]
+    else:
+        selected = unseen_questions + seen_questions[: (limit - len(unseen_questions))]
+
     result = []
-    for q in questions:
+    for q in selected:
         options_dict = {opt.option_key: opt.option_text for opt in q.options}
         # Explicitly omit correct_answer
         result.append({
@@ -62,6 +108,7 @@ def fetch_questions_for_level(db: Session, skill: str, level: str) -> List[Dict[
             "level": q.level,
             "topic": q.topic,
             "question": q.question,
+            "question_type": getattr(q, "question_type", "MCQ") or "MCQ",
             "options": options_dict
         })
     return result
@@ -98,7 +145,6 @@ def evaluate_attempt_state(db: Session, attempt: AssessmentAttempt) -> Tuple[Opt
                 func.lower(AssessmentQuestion.level) == lvl.lower(),
                 AssessmentQuestion.is_active == True
             )
-            .order_by(AssessmentQuestion.id.asc())
             .all()
         )
 
@@ -106,7 +152,7 @@ def evaluate_attempt_state(db: Session, attempt: AssessmentAttempt) -> Tuple[Opt
         answered_q_ids = [q_id for q_id in lvl_q_ids if q_id in answer_map]
 
         correct_count = sum(1 for q_id in answered_q_ids if answer_map[q_id].is_correct)
-        total_lvl_questions = len(lvl_questions) if lvl_questions else 5
+        total_lvl_questions = 5
 
         level_stats[lvl] = {
             "total": total_lvl_questions,
@@ -167,7 +213,7 @@ def start_assessment(db: Session, skill: str, required_level: str, user_id: Opti
     db.refresh(attempt)
 
     initial_level = allowed_levels[0]
-    questions = fetch_questions_for_level(db, canonical_skill, initial_level)
+    questions = fetch_questions_for_level(db, canonical_skill, initial_level, user_id=attempt.user_id)
 
     return {
         "attempt_id": attempt.id,
@@ -180,7 +226,13 @@ def start_assessment(db: Session, skill: str, required_level: str, user_id: Opti
     }
 
 
-def submit_answer(db: Session, attempt_id: int, question_id: int, selected_answer: str) -> Dict[str, Any]:
+def submit_answer(
+    db: Session,
+    attempt_id: int,
+    question_id: int,
+    selected_answer: str,
+    time_taken: Optional[float] = None
+) -> Dict[str, Any]:
     # 1. Fetch attempt
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
     if not attempt:
@@ -246,13 +298,14 @@ def submit_answer(db: Session, attempt_id: int, question_id: int, selected_answe
             detail=f"Question {question_id} is for level '{question.level}', but current active level is '{current_active_level}'."
         )
 
-    # 6. Save answer
+    # 6. Save answer with optional time_taken
     is_correct = (sel_ans == question.correct_answer.upper())
     answer_record = AssessmentAnswer(
         attempt_id=attempt_id,
         question_id=question_id,
         selected_answer=sel_ans,
         is_correct=is_correct,
+        time_taken=time_taken,
         answered_at=datetime.now(timezone.utc)
     )
     db.add(answer_record)
@@ -270,14 +323,24 @@ def submit_answer(db: Session, attempt_id: int, question_id: int, selected_answe
         level_passed = (stats.get("correct", 0) >= 4)
 
         if new_is_done:
-            attempt.assessed_level = new_last_passed
+            from app.services.skill_analysis_service import extract_assessment_scores, generate_ml_prediction
+            scores = extract_assessment_scores(db, {"attempt_id": attempt.id})
+            eval_lvl = new_last_passed
+            if not eval_lvl and scores:
+                eval_lvl = generate_ml_prediction(matched=True, required_level=attempt.required_level, importance="required", scores=scores)
+            attempt.assessed_level = eval_lvl
             attempt.completed_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(attempt)
         else:
-            next_questions = fetch_questions_for_level(db, attempt.skill, new_active_level)
+            next_questions = fetch_questions_for_level(db, attempt.skill, new_active_level, user_id=attempt.user_id)
     elif new_is_done:
-        attempt.assessed_level = new_last_passed
+        from app.services.skill_analysis_service import extract_assessment_scores, generate_ml_prediction
+        scores = extract_assessment_scores(db, {"attempt_id": attempt.id})
+        eval_lvl = new_last_passed
+        if not eval_lvl and scores:
+            eval_lvl = generate_ml_prediction(matched=True, required_level=attempt.required_level, importance="required", scores=scores)
+        attempt.assessed_level = eval_lvl
         attempt.completed_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(attempt)
@@ -324,13 +387,30 @@ def get_attempt_details(db: Session, attempt_id: int) -> Dict[str, Any]:
             "question_id": ans.question_id,
             "selected_answer": ans.selected_answer,
             "is_correct": ans.is_correct,
+            "time_taken": float(ans.time_taken) if ans.time_taken is not None else None,
             "answered_at": ans.answered_at.isoformat() if ans.answered_at else ""
         }
         for ans in answers
     ]
 
     target_level = active_level if active_level else (last_passed or "basic")
-    questions = fetch_questions_for_level(db, attempt.skill, target_level)
+    questions = fetch_questions_for_level(db, attempt.skill, target_level, user_id=attempt.user_id)
+
+    return {
+        "attempt_id": attempt.id,
+        "user_id": attempt.user_id,
+        "skill": attempt.skill,
+        "required_level": attempt.required_level,
+        "cv_level": attempt.cv_level,
+        "assessed_level": attempt.assessed_level,
+        "current_level": active_level if not attempt.completed_at else None,
+        "is_completed": attempt.completed_at is not None,
+        "started_at": attempt.started_at.isoformat() if attempt.started_at else "",
+        "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None,
+        "answers_count": len(answers),
+        "questions": questions,
+        "submitted_answers": submitted_answers_list
+    }
 
     return {
         "attempt_id": attempt.id,
@@ -376,7 +456,12 @@ def complete_assessment(db: Session, attempt_id: int) -> Dict[str, Any]:
             detail=f"Cannot mark assessment as completed: current level '{active_level}' is still in progress ({answered}/{total} answered)."
         )
 
-    attempt.assessed_level = last_passed
+    from app.services.skill_analysis_service import extract_assessment_scores, generate_ml_prediction
+    scores = extract_assessment_scores(db, {"attempt_id": attempt.id})
+    eval_lvl = last_passed
+    if not eval_lvl and scores:
+        eval_lvl = generate_ml_prediction(matched=True, required_level=attempt.required_level, importance="required", scores=scores)
+    attempt.assessed_level = eval_lvl
     attempt.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(attempt)

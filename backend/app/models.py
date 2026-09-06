@@ -161,6 +161,7 @@ class AssessmentQuestion(Base):
     topic = Column(String(100))
     question = Column(Text, nullable=False)
     correct_answer = Column(String(1), nullable=False)
+    question_type = Column(String(50), nullable=False, default="MCQ", server_default=text("'MCQ'"))
     is_active = Column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
 
     options = relationship("QuestionOption", back_populates="question_obj", cascade="all, delete-orphan")
@@ -228,6 +229,7 @@ class AssessmentAnswer(Base):
     )
     selected_answer = Column(String(1), nullable=False)
     is_correct = Column(Boolean, nullable=False)
+    time_taken = Column(Numeric(8, 2), nullable=True)
     answered_at = Column(DateTime, nullable=False, server_default=func.now())
 
     attempt = relationship("AssessmentAttempt", back_populates="answers")
