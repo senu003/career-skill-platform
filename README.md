@@ -1,6 +1,38 @@
 # Career Skill Assessment Platform
 
-An AI-driven platform for matching candidates to job requirements by evaluating CVs and conducting technical assessments.
+A full-stack platform that analyzes a candidate's CV against job requirements,
+identifies skill gaps, and evaluates technical proficiency through adaptive
+assessments.
+
+## Features
+
+- CV upload and text extraction
+- Job requirement extraction
+- CV-to-job skill matching
+- Adaptive technical assessments
+- Skill-level evaluation
+- Skill-gap identification
+- Readiness/recommendation system
+
+## Tech Stack
+
+Frontend:
+- React
+- Vite
+- JavaScript
+
+Backend:
+- Python
+- FastAPI
+- PostgreSQL
+
+AI / ML:
+- Gemini API / Groq provider
+- Scikit-learn
+
+Tools:
+- Docker
+- Git
 
 ## Evaluation Results (latest run)
 
@@ -50,3 +82,7 @@ graph TD
 This system uses AI to parse CVs and make decisions about candidate readiness. It should be used as an *assistive* tool for recruiters and hiring managers, not as an automated rejection engine. Candidates must always have the opportunity to contest AI-generated assessments or provide additional context. AI confidence scores are probabilistic and should be weighed alongside human judgment.
 
 *Note: ML accuracy is measured on synthetic data from the same family as its training data and must not be read as real-world performance.*
+
+## Status
+
+🚧 Ongoing
