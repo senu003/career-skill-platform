@@ -1,0 +1,6 @@
+[SYNTHETIC CV] Frontend Developer
+Experience: 5 years in software.
+Used JS extensively in production.
+Used React extensively in production.
+Used CSS extensively in production.
+Used TypeScript extensively in production.

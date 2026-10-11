@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export async function fetchWithAuth(url, options = {}) {
   const token = sessionStorage.getItem('token');
@@ -19,7 +19,9 @@ export async function fetchWithAuth(url, options = {}) {
   }
 
   if (!response.ok) {
-    let errorMsg = 'An error occurred';
+    let errorMsg = response.status === 502
+      ? 'The AI analysis service is temporarily unavailable (502 Bad Gateway). Please try again in a few moments.'
+      : 'An error occurred';
     try {
       const errorData = await response.json();
       if (typeof errorData.detail === 'string') {
@@ -32,7 +34,9 @@ export async function fetchWithAuth(url, options = {}) {
     } catch (e) {
       // JSON parse failed
     }
-    throw new Error(errorMsg);
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    throw err;
   }
 
   return response.json();

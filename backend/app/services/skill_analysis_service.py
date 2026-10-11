@@ -145,7 +145,19 @@ def extract_assessment_scores(
     if not assessment_data:
         return None
 
-    # Check if scores are directly provided in assessment_data dictionary
+    if "total_score" in assessment_data:
+        b_s = float(assessment_data.get("basic_score", 0.0))
+        i_s = float(assessment_data.get("intermediate_score", 0.0))
+        a_s = float(assessment_data.get("advanced_score", 0.0))
+        t_s = float(assessment_data["total_score"])
+        return {
+            "basic_score": b_s,
+            "intermediate_score": i_s,
+            "advanced_score": a_s,
+            "total_score": t_s
+        }
+
+    # Check if sub-scores are directly provided in assessment_data dictionary
     if (
         "basic_score" in assessment_data
         and "intermediate_score" in assessment_data
@@ -288,6 +300,15 @@ def combine_cv_and_assessment(
     matched_input = cv_matching_result.get("matched_skills", [])
     missing_input = cv_matching_result.get("missing_skills", [])
 
+    matched_skill_names = {s.get("skill", "").strip().lower() for s in matched_input if isinstance(s, dict) and s.get("skill")}
+
+    raw_skills = cv_matching_result.get("skills")
+    if not raw_skills:
+        raw_skills = matched_input + missing_input
+
+    transformed_matched = []
+    transformed_missing = []
+
     # Helper function to find assessment for a given skill name
     def lookup_assessment(skill_name: str) -> Optional[Dict[str, Any]]:
         if db_or_assessments is None:
@@ -318,23 +339,38 @@ def combine_cv_and_assessment(
 
         return None
 
-    transformed_matched = []
-    for item in matched_input:
+    for item in raw_skills:
         skill_name = item.get("skill", "")
+        norm_name = skill_name.strip().lower()
         req_level = item.get("required_level") or item.get("level", "")
-        importance = item.get("importance", "")
+        importance = item.get("importance", "required")
         evidence = item.get("evidence")
 
+        # CV Evaluation fields (strictly independent from assessment quiz results)
+        cv_match_status = item.get("cv_match_status")
+        if not cv_match_status:
+            if item.get("matched") is True or norm_name in matched_skill_names:
+                cv_match_status = "Match"
+            else:
+                cv_match_status = "Missing"
+
+        cv_level = item.get("cv_level")
+        if cv_level is None and cv_match_status in ["Match", "Needs Improvement"]:
+            cv_level = "unspecified"
+
+        matched_flag = (cv_match_status in ["Match", "Needs Improvement"])
+
+        # Assessment lookups (isolated from cv_match_status and cv_level)
         assessment_data = lookup_assessment(skill_name)
         assessed_lvl = assessment_data.get("assessed_level") if assessment_data else None
 
-        # Level gap calculation
+        # Level gap calculation for assessment evaluation
         level_gap = calculate_level_gap(req_level, assessed_lvl)
 
         # ML proficiency level prediction
         scores = extract_assessment_scores(db_or_assessments, assessment_data)
         ml_predicted_lvl = generate_ml_prediction(
-            matched=True,
+            matched=matched_flag,
             required_level=req_level,
             importance=importance,
             scores=scores
@@ -344,16 +380,16 @@ def combine_cv_and_assessment(
             required_level=req_level,
             assessed_level=assessed_lvl,
             scores=scores,
-            cv_level=None
+            cv_level=cv_level
         )
 
         total_score = scores.get("total_score") if scores else None
-        
+
         # Calculate deterministic weakness
         weakness_info = calculate_weakness(level_gap=level_gap, total_score=total_score)
         is_weakness = weakness_info["is_weakness"]
         weakness_reason = weakness_info["weakness_reason"]
-        
+
         # Generate rule-based recommendation
         rec_info = generate_recommendation(
             skill=skill_name,
@@ -374,16 +410,17 @@ def combine_cv_and_assessment(
                 user_id=user_id,
                 skill=skill_name,
                 current_attempt_id=curr_attempt_id,
-                cv_matched=True
+                cv_matched=matched_flag
             )
 
-        transformed_matched.append({
+        entry = {
             "skill": skill_name,
             "level": req_level,
             "required_level": req_level,
             "importance": importance,
-            "matched": True,
-            "cv_level": None,  # Strictly null per requirement
+            "matched": matched_flag,
+            "cv_level": cv_level,
+            "cv_match_status": cv_match_status,
             "assessed_level": assessed_lvl,
             "ml_predicted_level": ml_predicted_lvl,
             "level_gap": level_gap,
@@ -396,90 +433,29 @@ def combine_cv_and_assessment(
             "skill_recommendation": model1_rec,
             "recommendation_confidence": model1_conf,
             "evidence": evidence,
-            "improvement_probability": improvement_prob
-        })
+            "improvement_probability": improvement_prob,
+            "actionable_feedback": item.get("actionable_feedback")
+        }
 
-    transformed_missing = []
-    for item in missing_input:
-        skill_name = item.get("skill", "")
-        req_level = item.get("required_level") or item.get("level", "")
-        importance = item.get("importance", "")
-
-        assessment_data = lookup_assessment(skill_name)
-
-        # ML proficiency level prediction if scores exist
-        scores = extract_assessment_scores(db_or_assessments, assessment_data)
-        ml_predicted_lvl = generate_ml_prediction(
-            matched=False,
-            required_level=req_level,
-            importance=importance,
-            scores=scores
-        )
-
-        total_score = scores.get("total_score") if scores else None
-        
-        # Assessed level and gap for missing skills (usually None initially unless previously assessed)
-        assessed_lvl = assessment_data.get("assessed_level") if assessment_data else None
-        level_gap = calculate_level_gap(req_level, assessed_lvl)
-
-        model1_rec, model1_conf = generate_model1_evaluator_output(
-            required_level=req_level,
-            assessed_level=assessed_lvl,
-            scores=scores,
-            cv_level=None
-        )
-        
-        # Calculate deterministic weakness
-        weakness_info = calculate_weakness(level_gap=level_gap, total_score=total_score)
-        is_weakness = weakness_info["is_weakness"]
-        weakness_reason = weakness_info["weakness_reason"]
-        
-        # Generate rule-based recommendation
-        rec_info = generate_recommendation(
-            skill=skill_name,
-            required_level=req_level,
-            assessed_level=assessed_lvl,
-            level_gap=level_gap,
-            total_score=total_score,
-            is_weakness=is_weakness,
-            weakness_reason=weakness_reason
-        )
-
-        missing_improvement_prob = assessment_data.get("improvement_probability") if assessment_data else None
-        if missing_improvement_prob is None and isinstance(db_or_assessments, Session) and user_id is not None:
-            from app.services.longitudinal_service import predict_skill_improvement_from_history
-            curr_attempt_id = assessment_data.get("attempt_id") if assessment_data else None
-            missing_improvement_prob = predict_skill_improvement_from_history(
-                db=db_or_assessments,
-                user_id=user_id,
-                skill=skill_name,
-                current_attempt_id=curr_attempt_id,
-                cv_matched=False
-            )
-
-        transformed_missing.append({
-            "skill": skill_name,
-            "level": req_level,
-            "required_level": req_level,
-            "importance": importance,
-            "matched": False,
-            "cv_level": None,  # Strictly null per requirement
-            "assessed_level": assessed_lvl,
-            "ml_predicted_level": ml_predicted_lvl,
-            "level_gap": level_gap,
-            "total_score": total_score,
-            "is_weakness": is_weakness,
-            "weakness_reason": weakness_reason,
-            "priority": rec_info["priority"],
-            "recommendation": rec_info["recommendation"],
-            "recommendation_reason": rec_info["reason"],
-            "skill_recommendation": model1_rec,
-            "recommendation_confidence": model1_conf,
-            "evidence": None,
-            "improvement_probability": missing_improvement_prob
-        })
+        if cv_match_status in ["Match", "Needs Improvement"]:
+            transformed_matched.append(entry)
+        else:
+            transformed_missing.append(entry)
 
     transformed_skills = transformed_matched + transformed_missing
+
+    # Re-calculate simple CV match score data
+    total_skills = len(transformed_skills)
+    matched_count = len(transformed_matched)
+    missing_count = len(transformed_missing)
+    cv_score = round((matched_count / total_skills) * 100, 2) if total_skills > 0 else 0.0
+
+    score_data = {
+        "total_skills": total_skills,
+        "matched_count": matched_count,
+        "missing_count": missing_count,
+        "score": cv_score
+    }
 
     combined_result = {
         "filename": cv_matching_result.get("filename"),
@@ -494,10 +470,14 @@ def combine_cv_and_assessment(
         from app.ml.predict_readiness import predict_final_recommendation
         model2_output = predict_final_recommendation(combined_result)
         combined_result["final_verdict"] = model2_output.get("final_verdict")
+        combined_result["readiness_verdict"] = model2_output.get("readiness_verdict") or model2_output.get("final_verdict")
+        combined_result["readiness_reasons"] = model2_output.get("readiness_reasons")
         combined_result["recommendation_confidence"] = model2_output.get("confidence")
         combined_result["priority_skills"] = model2_output.get("priority_skills")
     except Exception:
         combined_result["final_verdict"] = None
+        combined_result["readiness_verdict"] = None
+        combined_result["readiness_reasons"] = None
         combined_result["recommendation_confidence"] = None
         combined_result["priority_skills"] = None
 

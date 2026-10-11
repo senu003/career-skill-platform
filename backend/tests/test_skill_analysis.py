@@ -73,7 +73,7 @@ class TestSkillAnalysisConnection(unittest.TestCase):
         self.assertEqual(matched_item["skill"], "React")
         self.assertEqual(matched_item["required_level"], "intermediate")
         self.assertTrue(matched_item["matched"])
-        self.assertIsNone(matched_item["cv_level"])
+        self.assertEqual(matched_item["cv_level"], "unspecified")
         self.assertIsNone(matched_item["assessed_level"])
         self.assertIsNone(matched_item["level_gap"])
         self.assertEqual(matched_item["evidence"], "Experienced with React.js...")
@@ -268,7 +268,7 @@ class TestSkillAnalysisConnection(unittest.TestCase):
         res = combine_cv_and_assessment(cv_result, db_or_assessments=self.db, user_id=101)
         item = res["matched_skills"][0]
         self.assertTrue(item["matched"])
-        self.assertIsNone(item["cv_level"])
+        self.assertEqual(item["cv_level"], "unspecified")
         self.assertEqual(item["assessed_level"], "advanced")
         self.assertEqual(item["level_gap"], 0)
 

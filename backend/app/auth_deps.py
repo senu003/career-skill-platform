@@ -12,14 +12,14 @@ from app.models import User
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+JWT_SECRET = os.getenv("JWT_SECRET")
 
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY environment variable is required")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
 
 def get_db():
     db = SessionLocal()
@@ -36,14 +36,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     if not token:
         return None
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             return None

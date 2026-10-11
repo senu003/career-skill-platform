@@ -23,6 +23,8 @@ class FinalAssessmentAggregationSchema(BaseModel):
     preferred_skills_summary: str = Field(..., description="Summary of preferred skills status")
     readiness_status: str = Field(..., description="Overall readiness string (e.g., Excellent, Needs Improvement)")
     final_verdict: Optional[str] = Field(None, description="Model 2 final job recommendation verdict")
+    readiness_verdict: Optional[str] = Field(None, description="Candidate job readiness verdict")
+    readiness_reasons: Optional[List[str]] = Field(None, description="2-3 plain-language reasons explaining the readiness verdict")
     recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 2 confidence score")
     overall_improvement_probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Aggregated candidate skill improvement probability across skills with valid longitudinal history")
     skills: List[FinalSkillItemSchema] = Field(..., description="Complete individual skill results")

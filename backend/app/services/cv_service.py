@@ -52,5 +52,7 @@ async def process_cv(file: UploadFile) -> dict:
         "filename": file.filename,
         "file_path": file_path,
         "pages": pdf_data["pages"],
-        "text": pdf_data["text"]
+        "text": pdf_data["text"],
+        "parsing_method": pdf_data.get("parsing_method", "unknown"),
+        "parse_quality_score": pdf_data.get("parse_quality_score", 0.0)
     }

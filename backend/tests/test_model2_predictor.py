@@ -48,7 +48,7 @@ class TestModel2Predictor(unittest.TestCase):
         }
 
         res = self.predictor.predict(input_data)
-        self.assertEqual(res["final_verdict"], "Short-Term Prep")
+        self.assertEqual(res["final_verdict"], "Interview Ready")
 
     def test_scenario_c_major_gaps(self):
         """
@@ -87,8 +87,7 @@ class TestModel2Predictor(unittest.TestCase):
             "assessment_completion_rate": 0.20
         }
 
-        raw_verdict = "Interview Ready"
-        adjusted_verdict, conf = self.predictor._apply_safety_layer(raw_verdict, 0.85, features)
+        adjusted_verdict, conf = self.predictor._deterministic_verdict(features)
         self.assertEqual(adjusted_verdict, "Major Upskill Required")
 
     def test_convenience_function(self):
@@ -103,6 +102,48 @@ class TestModel2Predictor(unittest.TestCase):
         self.assertIn("confidence", res)
         self.assertIn("priority_skills", res)
 
+    def test_readiness_reasons_counts_required_skills_only(self):
+        """Verify readiness_reasons counts required skills only when given 5 required + 1 preferred."""
+        from app.ml.predict_readiness import generate_readiness_reasons
+
+        # Direct test with 5 required + 1 preferred
+        raw_skills = [
+            {"skill": "Python", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match"},
+            {"skill": "SQL", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match"},
+            {"skill": "FastAPI", "required_level": "basic", "importance": "required", "matched": True, "cv_match_status": "Match"},
+            {"skill": "Docker", "required_level": "basic", "importance": "required", "matched": False, "cv_match_status": "Missing"},
+            {"skill": "Kubernetes", "required_level": "basic", "importance": "required", "matched": False, "cv_match_status": "Missing"},
+            {"skill": "GraphQL", "required_level": "basic", "importance": "preferred", "matched": True, "cv_match_status": "Match"},
+        ]
+        features = {
+            "total_required_skills": 6.0,
+            "missing_skills_count": 2.0
+        }
+        reasons = generate_readiness_reasons("Short-Term Prep", features, raw_skills=raw_skills)
+        self.assertGreaterEqual(len(reasons), 1)
+        self.assertIn("3 of 5 required skills", reasons[0])
+        self.assertNotIn("6 required skills", reasons[0])
+
+        # Test through predict_final_recommendation pipeline
+        analysis = {
+            "matched_skills": [
+                {"skill": "Python", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match"},
+                {"skill": "SQL", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match"},
+                {"skill": "FastAPI", "required_level": "basic", "importance": "required", "matched": True, "cv_match_status": "Match"},
+                {"skill": "GraphQL", "required_level": "basic", "importance": "preferred", "matched": True, "cv_match_status": "Match"},
+            ],
+            "missing_skills": [
+                {"skill": "Docker", "required_level": "basic", "importance": "required", "matched": False, "cv_match_status": "Missing"},
+                {"skill": "Kubernetes", "required_level": "basic", "importance": "required", "matched": False, "cv_match_status": "Missing"},
+            ]
+        }
+        pipeline_res = predict_final_recommendation(analysis)
+        pipeline_reasons = pipeline_res.get("readiness_reasons", [])
+        self.assertGreaterEqual(len(pipeline_reasons), 1)
+        self.assertIn("3 of 5 required skills", pipeline_reasons[0])
+        self.assertNotIn("6 required skills", pipeline_reasons[0])
+
 
 if __name__ == "__main__":
     unittest.main()
+

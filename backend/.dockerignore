@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env
+.pytest_cache/
+tests/
+# We don't want to bake in uploads to the image, we want them in volume
+uploads/

@@ -169,6 +169,39 @@ class TestModel2Features(unittest.TestCase):
         self.assertEqual(priority_list[1]["skill"], "C")
         self.assertEqual(priority_list[2]["skill"], "A")
 
+    def test_priority_skills_gaps_only_filters_matched_and_orders(self):
+        skills = [
+            {"skill": "Docker", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match", "level_gap": 0},
+            {"skill": "Python", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match", "level_gap": 0},
+            {"skill": "AWS", "required_level": "intermediate", "importance": "required", "matched": False, "cv_match_status": "Missing", "level_gap": None},
+            {"skill": "Kubernetes", "required_level": "advanced", "importance": "required", "matched": False, "cv_match_status": "Missing", "level_gap": None},
+            {"skill": "Git", "required_level": "basic", "importance": "preferred", "matched": False, "cv_match_status": "Missing", "level_gap": None}
+        ]
+
+        priority_list = compute_priority_skills(skills, top_n=5, gaps_only=True)
+        # Matched skills (Docker, Python) must NOT be included
+        skills_in_priority = [p["skill"] for p in priority_list]
+        self.assertNotIn("Docker", skills_in_priority)
+        self.assertNotIn("Python", skills_in_priority)
+
+        # Order must be Required before Preferred, then largest gap first:
+        # 1. Kubernetes (Required, Advanced = gap 3)
+        # 2. AWS (Required, Intermediate = gap 2)
+        # 3. Git (Preferred, Basic = gap 1)
+        self.assertEqual(len(priority_list), 3)
+        self.assertEqual(priority_list[0]["skill"], "Kubernetes")
+        self.assertEqual(priority_list[1]["skill"], "AWS")
+        self.assertEqual(priority_list[2]["skill"], "Git")
+
+    def test_priority_skills_no_gaps_returns_empty(self):
+        skills = [
+            {"skill": "Docker", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match", "level_gap": 0},
+            {"skill": "Python", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match", "level_gap": 0}
+        ]
+
+        priority_list = compute_priority_skills(skills, top_n=5, gaps_only=True)
+        self.assertEqual(priority_list, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,8 @@
+[SYNTHETIC CV] Backend Developer
+Experience: 5 years in software.
+Used Python extensively in production.
+Used Django extensively in production.
+Used PostgreSQL extensively in production.
+Used Docker extensively in production.
+Used AWS extensively in production.
+Eduation: University of Tech

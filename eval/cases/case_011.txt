@@ -1,0 +1,5 @@
+[SYNTHETIC CV] Frontend Developer
+Experience: 5 years in software.
+Familiar with React.
+Familiar with CSS.
+Familiar with TypeScript.

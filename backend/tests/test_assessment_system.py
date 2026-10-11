@@ -308,6 +308,53 @@ class TestAssessmentSystem(unittest.TestCase):
         self.assertEqual(comp_res.status_code, 400)
         self.assertIn("still in progress", comp_res.json()["detail"])
 
+    def test_15_supported_skills_endpoint_and_matching(self):
+        """15. Verify /assessment/supported-skills returns Python, SQL, Docker and matching handles case/format."""
+        from app.services.assessment_service import is_skill_supported, normalize_skill, get_supported_skills_list
+
+        # Test endpoint
+        res = self.client.get("/assessment/supported-skills")
+        self.assertEqual(res.status_code, 200)
+        skills = res.json()["supported_skills"]
+        for expected in ["JavaScript", "React", "PostgreSQL", "SQL", "Python", "Docker"]:
+            self.assertIn(expected, skills)
+
+        # Test case and format matching for Python, SQL, Docker
+        test_cases = [
+            ("Python", "Python"),
+            ("python", "Python"),
+            ("PYTHON", "Python"),
+            (" python ", "Python"),
+            ("SQL", "PostgreSQL"),
+            ("sql", "PostgreSQL"),
+            ("Sql", "PostgreSQL"),
+            ("Docker", "Docker"),
+            ("docker", "Docker"),
+            ("DOCKER", "Docker"),
+            (" docker ", "Docker"),
+            ("PostgreSQL", "PostgreSQL"),
+            ("postgres", "PostgreSQL"),
+            ("JavaScript", "JavaScript"),
+            ("js", "JavaScript"),
+        ]
+
+        for raw_input, expected_norm in test_cases:
+            self.assertTrue(is_skill_supported(raw_input), f"Failed for {raw_input}")
+            self.assertEqual(normalize_skill(raw_input), expected_norm, f"Failed norm for {raw_input}")
+
+        # Verify assessments can be started for Python, SQL, Docker
+        for skill_to_start in ["Python", "SQL", "Docker"]:
+            start_res = self.client.post("/assessment/start", json={
+                "skill": skill_to_start,
+                "required_level": "basic",
+                "user_id": self.user_id
+            })
+            self.assertEqual(start_res.status_code, 201, f"Failed starting assessment for {skill_to_start}")
+            data = start_res.json()
+            self.assertEqual(len(data["questions"]), 5)
+            self.assertEqual(data["current_level"], "basic")
+
 
 if __name__ == "__main__":
     unittest.main()
+

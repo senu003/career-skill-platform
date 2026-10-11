@@ -1,0 +1,5 @@
+[SYNTHETIC CV] ML Engineer
+Experience: 5 years in software.
+Heard of PyTorch.
+Heard of AWS.
+Eduation: University of Tech

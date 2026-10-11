@@ -468,6 +468,318 @@ INITIAL_QUESTIONS = [
         "skill": "PostgreSQL", "level": "advanced", "topic": "WAL",
         "question": "What does WAL stand for in PostgreSQL durability architecture?",
         "correct_answer": "B", "options": {"A": "Weighted Allocation List", "B": "Write-Ahead Logging", "C": "Wide Access Layer", "D": "Work Automation Log"}
+    },
+
+    # PYTHON — BASIC (10 questions)
+    {
+        "skill": "Python", "level": "basic", "topic": "Functions",
+        "question": "Which keyword is used to define a function in Python?",
+        "correct_answer": "A", "options": {"A": "def", "B": "func", "C": "function", "D": "define"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Data Types",
+        "question": "Which Python built-in data type is mutable and ordered?",
+        "correct_answer": "B", "options": {"A": "tuple", "B": "list", "C": "str", "D": "frozenset"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Tuples",
+        "question": "How do you define a tuple with a single integer element in Python?",
+        "correct_answer": "C", "options": {"A": "(1)", "B": "tuple(1)", "C": "(1,)", "D": "[1]"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Loops",
+        "question": "Which statement iterates over items of any sequence in Python?",
+        "correct_answer": "A", "options": {"A": "for", "B": "loop", "C": "iterate", "D": "foreach"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Booleans",
+        "question": "What is the result of bool([]) in Python?",
+        "correct_answer": "B", "options": {"A": "True", "B": "False", "C": "None", "D": "Error"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Strings",
+        "question": "Which string method removes whitespace from the start and end of a string?",
+        "correct_answer": "A", "options": {"A": "strip()", "B": "trim()", "C": "clean()", "D": "cut()"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Dictionaries",
+        "question": "Which method returns all values from a Python dictionary?",
+        "correct_answer": "B", "options": {"A": "items()", "B": "values()", "C": "keys()", "D": "get_all()"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Comments",
+        "question": "Which symbol is used for single-line comments in Python?",
+        "correct_answer": "A", "options": {"A": "#", "B": "//", "C": "/*", "D": "--"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Operators",
+        "question": "Which operator performs floor integer division in Python?",
+        "correct_answer": "B", "options": {"A": "/", "B": "//", "C": "%", "D": "**"}
+    },
+    {
+        "skill": "Python", "level": "basic", "topic": "Built-ins",
+        "question": "Which built-in function returns the number of items in a list or string?",
+        "correct_answer": "A", "options": {"A": "len()", "B": "size()", "C": "count()", "D": "length()"}
+    },
+
+    # PYTHON — INTERMEDIATE (10 questions)
+    {
+        "skill": "Python", "level": "intermediate", "topic": "List Comprehensions",
+        "question": "What is the primary benefit of list comprehensions in Python?",
+        "correct_answer": "A", "options": {"A": "Concise syntax for transforming and filtering sequences", "B": "Compiling Python to C", "C": "Creating global variables", "D": "Deleting duplicate items automatically"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Generators",
+        "question": "Which keyword turns a regular Python function into a generator?",
+        "correct_answer": "B", "options": {"A": "return", "B": "yield", "C": "gen", "D": "emit"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Decorators",
+        "question": "What is a decorator in Python?",
+        "correct_answer": "A", "options": {"A": "A function that takes another function and extends its behavior", "B": "A GUI layout widget", "C": "A database schema migration", "D": "A style sheet for terminal printing"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Context Managers",
+        "question": "Which statement manages resources safely using the context manager protocol?",
+        "correct_answer": "B", "options": {"A": "using", "B": "with", "C": "try_resource", "D": "open_as"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Function Arguments",
+        "question": "In a function definition, what does **kwargs collect?",
+        "correct_answer": "A", "options": {"A": "Arbitrary keyword arguments as a dictionary", "B": "Positional arguments as a list", "C": "Default arguments as a tuple", "D": "Global environment variables"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Lambdas",
+        "question": "What is a lambda function in Python?",
+        "correct_answer": "A", "options": {"A": "A small anonymous inline function", "B": "A multithreaded daemon process", "C": "A database trigger", "D": "A class constructor"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "OOP",
+        "question": "Which method serves as the initializer when a class instance is created?",
+        "correct_answer": "C", "options": {"A": "__new__ only", "B": "__start__", "C": "__init__", "D": "__create__"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Exceptions",
+        "question": "Which block always executes in a try/except block regardless of errors?",
+        "correct_answer": "B", "options": {"A": "else", "B": "finally", "C": "always", "D": "catch"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Sets",
+        "question": "Which set method or operator returns elements present in both set A and set B?",
+        "correct_answer": "A", "options": {"A": "intersection (&)", "B": "union (|)", "C": "difference (-)", "D": "symmetric_difference (^)"}
+    },
+    {
+        "skill": "Python", "level": "intermediate", "topic": "Modules",
+        "question": "What is the value of __name__ when a Python file is run directly?",
+        "correct_answer": "A", "options": {"A": "'__main__'", "B": "'root'", "C": "'__init__'", "D": "'__module__'"}
+    },
+
+    # PYTHON — ADVANCED (10 questions)
+    {
+        "skill": "Python", "level": "advanced", "topic": "GIL",
+        "question": "What is the primary role of the Global Interpreter Lock (GIL) in CPython?",
+        "correct_answer": "A", "options": {"A": "Synchronizes thread execution so only one thread executes Python bytecode at once", "B": "Encrypts source code in memory", "C": "Accelerates GPU computing", "D": "Prevents file system modifications"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Metaclasses",
+        "question": "What is a metaclass in Python?",
+        "correct_answer": "B", "options": {"A": "A class with only static methods", "B": "A class whose instances are themselves classes", "C": "A deprecated Python 2 feature", "D": "A database ORM entity"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Asyncio",
+        "question": "Which syntax defines a native asynchronous coroutine in Python?",
+        "correct_answer": "A", "options": {"A": "async def my_func():", "B": "coroutine def my_func():", "C": "def async my_func():", "D": "spawn def my_func():"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Descriptors",
+        "question": "Which methods form the descriptor protocol in Python?",
+        "correct_answer": "A", "options": {"A": "__get__, __set__, and __delete__", "B": "__init__, __new__, and __del__", "C": "__enter__ and __exit__", "D": "__iter__ and __next__"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Memory",
+        "question": "How does CPython primarily reclaim unreferenced memory?",
+        "correct_answer": "B", "options": {"A": "Mark-and-sweep only", "B": "Reference counting supplemented by a cyclic garbage collector", "C": "Manual free() calls", "D": "OS page swapping"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Dunder Methods",
+        "question": "What is the goal of implementing __repr__ on a custom class?",
+        "correct_answer": "A", "options": {"A": "Provide an unambiguous string representation useful for debugging", "B": "Format text for end users", "C": "Convert the object into binary bytes", "D": "Serialize to JSON automatically"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Optimization",
+        "question": "What is the main advantage of defining __slots__ in a Python class?",
+        "correct_answer": "A", "options": {"A": "Reduces memory footprint by avoiding an instance __dict__", "B": "Makes all attributes public", "C": "Allows multiple inheritance", "D": "Speeds up disk I/O"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Collections",
+        "question": "Which collection provides O(1) appends and pops from both ends?",
+        "correct_answer": "B", "options": {"A": "list", "B": "collections.deque", "C": "collections.ChainMap", "D": "collections.defaultdict"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Concurrency",
+        "question": "Why is the multiprocessing module preferred over threading for CPU-bound Python tasks?",
+        "correct_answer": "A", "options": {"A": "Separate processes bypass the GIL and utilize multiple CPU cores", "B": "Processes share memory automatically without IPC", "C": "Threads use more RAM than processes", "D": "CPython forbids threading for math operations"}
+    },
+    {
+        "skill": "Python", "level": "advanced", "topic": "Weak References",
+        "question": "What does Python's weakref module provide?",
+        "correct_answer": "B", "options": {"A": "Encrypted pointers to remote databases", "B": "References that do not increase the target object's reference count", "C": "Unsafe memory casting", "D": "Lazy imports"}
+    },
+
+    # DOCKER — BASIC (10 questions)
+    {
+        "skill": "Docker", "level": "basic", "topic": "Containers",
+        "question": "What is a Docker container?",
+        "correct_answer": "A", "options": {"A": "A lightweight, standalone package containing an application and its dependencies", "B": "A full hardware virtual machine with its own hypervisor", "C": "A physical server", "D": "A database table"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Dockerfile",
+        "question": "Which instruction specifies the parent base image in a Dockerfile?",
+        "correct_answer": "A", "options": {"A": "FROM", "B": "BASE", "C": "ROOT", "D": "IMAGE"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Build",
+        "question": "Which command builds a Docker image tagged 'myapp' from the current directory?",
+        "correct_answer": "B", "options": {"A": "docker create myapp .", "B": "docker build -t myapp .", "C": "docker make -tag myapp", "D": "docker compile myapp"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "CLI",
+        "question": "Which command lists currently running Docker containers?",
+        "correct_answer": "A", "options": {"A": "docker ps", "B": "docker list", "C": "docker show", "D": "docker containers"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Images",
+        "question": "What is the relationship between a Docker image and a Docker container?",
+        "correct_answer": "A", "options": {"A": "A container is a running instance of an image", "B": "An image is a running instance of a container", "C": "They are exact synonyms", "D": "An image is a virtual disk on AWS"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Registry",
+        "question": "Which command pulls an image from a Docker registry without running it?",
+        "correct_answer": "B", "options": {"A": "docker fetch", "B": "docker pull", "C": "docker download", "D": "docker clone"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Dockerfile",
+        "question": "Which instruction specifies the default executable command when a container runs?",
+        "correct_answer": "A", "options": {"A": "CMD", "B": "RUN", "C": "EXECUTE", "D": "START"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "CLI",
+        "question": "Which command stops a running container gracefully?",
+        "correct_answer": "B", "options": {"A": "docker halt", "B": "docker stop", "C": "docker terminate", "D": "docker pause"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Ports",
+        "question": "Which flag in 'docker run' maps host port 8080 to container port 80?",
+        "correct_answer": "A", "options": {"A": "-p 8080:80", "B": "--port 80:8080", "C": "-m 8080->80", "D": "-expose 8080"}
+    },
+    {
+        "skill": "Docker", "level": "basic", "topic": "Volumes",
+        "question": "What is the primary purpose of a Docker volume?",
+        "correct_answer": "A", "options": {"A": "Persist data independently of container lifecycle", "B": "Increase CPU limits", "C": "Encrypt network packets", "D": "Compress image layers"}
+    },
+
+    # DOCKER — INTERMEDIATE (10 questions)
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Compose",
+        "question": "What is Docker Compose primarily used for?",
+        "correct_answer": "A", "options": {"A": "Defining and running multi-container Docker applications via YAML", "B": "Compiling C++ programs", "C": "Monitoring disk temperature", "D": "Signing SSL certificates"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Multi-stage",
+        "question": "What is a major advantage of multi-stage Docker builds?",
+        "correct_answer": "A", "options": {"A": "Minimizing final image size by discarding build-time tools", "B": "Running containers across multiple clouds simultaneously", "C": "Encrypting the source code", "D": "Automatically updating dependencies"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Networking",
+        "question": "What is the default network driver for containers on a standalone Docker host?",
+        "correct_answer": "B", "options": {"A": "host", "B": "bridge", "C": "overlay", "D": "macvlan"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Dockerignore",
+        "question": "What is the primary function of a .dockerignore file?",
+        "correct_answer": "A", "options": {"A": "Prevent specified files from being sent to the Docker build context", "B": "Block network traffic to specified ports", "C": "Exclude containers from docker ps", "D": "Ignore error codes during docker run"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "ENV vs ARG",
+        "question": "What is the key difference between ARG and ENV instructions?",
+        "correct_answer": "A", "options": {"A": "ARG is available during image build only; ENV persists in the running container", "B": "ENV is build-only; ARG persists in container runtime", "C": "ARG is encrypted; ENV is plain text", "D": "They are completely interchangeable"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Volumes",
+        "question": "Which command creates a named Docker volume?",
+        "correct_answer": "A", "options": {"A": "docker volume create", "B": "docker make volume", "C": "docker disk init", "D": "docker mount new"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Logs",
+        "question": "Which command views the standard output logs of a container?",
+        "correct_answer": "A", "options": {"A": "docker logs", "B": "docker output", "C": "docker tail-system", "D": "docker read"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Healthcheck",
+        "question": "What is the purpose of the HEALTHCHECK instruction in a Dockerfile?",
+        "correct_answer": "B", "options": {"A": "Scans image for vulnerabilities", "B": "Configures a command to test if the container is functioning properly", "C": "Monitors host hardware fans", "D": "Checks RAM usage every second"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Exec",
+        "question": "Which command opens an interactive shell inside a running container?",
+        "correct_answer": "A", "options": {"A": "docker exec -it <container_id> sh", "B": "docker attach --interactive <container_id>", "C": "docker run -it <container_id> sh", "D": "docker shell <container_id>"}
+    },
+    {
+        "skill": "Docker", "level": "intermediate", "topic": "Restart Policy",
+        "question": "Which restart policy restarts a container unless it was explicitly stopped by the user?",
+        "correct_answer": "C", "options": {"A": "always", "B": "on-failure", "C": "unless-stopped", "D": "no"}
+    },
+
+    # DOCKER — ADVANCED (10 questions)
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Security",
+        "question": "Why is it recommended to run containers with a non-root USER?",
+        "correct_answer": "A", "options": {"A": "To adhere to least privilege and prevent host compromise in case of container breakout", "B": "Because root users cannot listen on network ports", "C": "Because Docker daemon refuses to build images with root", "D": "To speed up image downloads"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Storage Drivers",
+        "question": "Which storage driver is the standard default on modern Linux distributions for Docker?",
+        "correct_answer": "B", "options": {"A": "aufs", "B": "overlay2", "C": "vfs", "D": "devicemapper"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Isolation",
+        "question": "Which Linux kernel features provide process and resource isolation for Docker containers?",
+        "correct_answer": "A", "options": {"A": "Namespaces (isolation) and cgroups (resource limits)", "B": "Hyper-V and VirtualBox", "C": "KVM and QEMU", "D": "Systemd and journald"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Orchestration",
+        "question": "What is Docker Swarm mode?",
+        "correct_answer": "A", "options": {"A": "Built-in cluster management and container orchestration engine", "B": "A peer-to-peer torrent protocol for images", "C": "A load tester for Docker containers", "D": "A tool to compress Dockerfiles"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Build Context",
+        "question": "Why does a large Docker build context negatively impact build performance?",
+        "correct_answer": "B", "options": {"A": "It crashes the local operating system", "B": "The entire context is transmitted across the socket to the Docker daemon before building begins", "C": "It invalidates CPU registers", "D": "Docker requires 1GB of swap per build file"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Multi-arch",
+        "question": "Which Docker tool enables building multi-platform images (e.g., amd64 and arm64)?",
+        "correct_answer": "A", "options": {"A": "Docker Buildx", "B": "Docker Compose", "C": "Docker Machine", "D": "Docker Hub Auto"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Resource Limits",
+        "question": "Which flags in 'docker run' restrict container CPU and memory usage?",
+        "correct_answer": "A", "options": {"A": "--cpus and --memory", "B": "--max-cpu and --max-ram", "C": "-c and -r", "D": "--cores and --bytes"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Capabilities",
+        "question": "What does the '--cap-drop ALL' option do during 'docker run'?",
+        "correct_answer": "A", "options": {"A": "Removes all default Linux kernel capabilities for enhanced container sandboxing", "B": "Disables memory limits", "C": "Stops all network interfaces", "D": "Deletes all files in the container on exit"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Secrets",
+        "question": "What is the recommended method to pass sensitive credentials to containers in production?",
+        "correct_answer": "B", "options": {"A": "Hardcoding them into the Dockerfile", "B": "Using Docker Secrets or dedicated secret management mounts", "C": "Committing them to Git", "D": "Baking them into public image tags"}
+    },
+    {
+        "skill": "Docker", "level": "advanced", "topic": "Layers",
+        "question": "How does Docker cache layers efficiently during 'docker build'?",
+        "correct_answer": "A", "options": {"A": "If a step's command and inputs haven't changed, Docker reuses previously built cached layers", "B": "It always re-downloads every layer from the registry", "C": "It rebuilds all layers when any single file is modified", "D": "Layers are only cached if they are under 10MB"}
     }
 ]
 

@@ -52,12 +52,17 @@ class Model1SkillEvaluator:
         self._load_model()
 
     def _load_model(self):
-        """Loads trained pipeline, or trains a fallback pipeline if missing."""
-        if not self.model_path.exists():
-            from app.ml.train_weakness_model import train_and_evaluate_model1
-            metrics, self.pipeline = train_and_evaluate_model1(model_output_path=self.model_path)
-        else:
-            self.pipeline = joblib.load(self.model_path)
+        """Loads trained pipeline safely. If unavailable, keeps pipeline as None for fallback."""
+        import logging
+        try:
+            if not self.model_path.exists():
+                from app.ml.train_weakness_model import train_and_evaluate_model1
+                metrics, self.pipeline = train_and_evaluate_model1(model_output_path=self.model_path)
+            else:
+                self.pipeline = joblib.load(self.model_path)
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Failed to load Model 1 pipeline: {e}")
+            self.pipeline = None
 
     @classmethod
     def prepare_features(cls, input_dict: Dict[str, Any]) -> Dict[str, float]:
@@ -134,6 +139,13 @@ class Model1SkillEvaluator:
             "speed_accuracy": speed_accuracy,
         }
 
+    def _rule_based_fallback(self, features: Dict[str, float]) -> tuple[str, float]:
+        """Deterministic fallback if ML pipeline is unavailable or throws an error."""
+        if features.get("score_gap", 0) > 0 or features.get("assessment_score", 0) < 0.60:
+            return "Upgrade Needed", 0.80
+        else:
+            return "Mastered", 0.80
+
     def predict_single(self, input_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
         Predicts Model 1 recommendation and confidence score for a candidate skill record.
@@ -144,20 +156,37 @@ class Model1SkillEvaluator:
                 "confidence": float (0.0 to 1.0)
             }
         """
+        import logging
+        logger = logging.getLogger(__name__)
         features = self.prepare_features(input_dict)
-        df_input = pd.DataFrame([features])[MODEL1_FEATURES]
 
-        recommendation = str(self.pipeline.predict(df_input)[0])
+        rules_rec, rules_conf = self._rule_based_fallback(features)
+        
+        ml_rec = None
+        ml_conf = None
+        if self.pipeline is not None:
+            try:
+                df_input = pd.DataFrame([features])[MODEL1_FEATURES]
+                ml_rec = str(self.pipeline.predict(df_input)[0])
+    
+                if hasattr(self.pipeline, "predict_proba"):
+                    probs = self.pipeline.predict_proba(df_input)[0]
+                    ml_conf = round(float(np.max(probs)), 4)
+                else:
+                    ml_conf = 0.85
+            except Exception as e:
+                logger.warning(f"Model 1 ML Challenger failed: {e}")
 
-        confidence = 0.85
-        if hasattr(self.pipeline, "predict_proba"):
-            probs = self.pipeline.predict_proba(df_input)[0]
-            max_prob = float(np.max(probs))
-            confidence = round(max_prob, 4)
+        ml_override_attempted = (ml_rec is not None and ml_rec != rules_rec)
+        if ml_override_attempted:
+            logger.info(f"Model 1 ML override attempt: predicted '{ml_rec}', rules said '{rules_rec}'.")
 
         return {
-            "recommendation": recommendation,
-            "confidence": confidence
+            "recommendation": rules_rec,
+            "rules_recommendation": rules_rec,
+            "ml_recommendation": ml_rec,
+            "confidence": rules_conf,
+            "ml_override_attempted": ml_override_attempted
         }
 
 

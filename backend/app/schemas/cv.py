@@ -39,6 +39,8 @@ class CVAnalyzeResponseSchema(BaseModel):
     skills: Optional[List[FinalSkillItemSchema]] = None
     score_data: Optional[SkillScoreSchema] = None
     final_verdict: Optional[str] = Field(None, description="Model 2 final job recommendation verdict")
+    readiness_verdict: Optional[str] = Field(None, description="Candidate job readiness verdict")
+    readiness_reasons: Optional[List[str]] = Field(None, description="2-3 plain-language reasons explaining the readiness verdict")
     recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 2 confidence score")
     priority_skills: Optional[List[Dict[str, Any]]] = Field(None, description="Top priority skills requiring candidate attention")
 

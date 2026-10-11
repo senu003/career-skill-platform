@@ -186,6 +186,48 @@ class TestMLIntegration(unittest.TestCase):
         self.assertIsNone(missing_docker["assessed_level"])
         self.assertIsNone(missing_docker["ml_predicted_level"])
 
+    def test_12_model1_predict_single_fallback_when_pipeline_none(self):
+        """12. Model 1 predict_single returns fallback if pipeline is None."""
+        from app.ml.predict_weakness import Model1SkillEvaluator
+        evaluator = Model1SkillEvaluator()
+        evaluator.pipeline = None
+        
+        # Test 1: Upgrade Needed fallback (score_gap > 0)
+        input_dict_gap = {
+            "jd_required_level": "intermediate",
+            "assessed_level": "basic",
+            "assessment_score": 0.8
+        }
+        res_gap = evaluator.predict_single(input_dict_gap)
+        self.assertEqual(res_gap["recommendation"], "Upgrade Needed")
+        
+        # Test 2: Mastered fallback (no gap, good score)
+        input_dict_master = {
+            "jd_required_level": "intermediate",
+            "assessed_level": "advanced",
+            "assessment_score": 0.9
+        }
+        res_master = evaluator.predict_single(input_dict_master)
+        self.assertEqual(res_master["recommendation"], "Mastered")
+        
+    def test_13_model1_predict_single_fallback_on_exception(self):
+        """13. Model 1 predict_single returns fallback if prediction raises an exception."""
+        from app.ml.predict_weakness import Model1SkillEvaluator
+        evaluator = Model1SkillEvaluator()
+        
+        # Mock pipeline to raise exception
+        class BadPipeline:
+            def predict(self, X):
+                raise ValueError("Simulated prediction error")
+        
+        evaluator.pipeline = BadPipeline()
+        input_dict = {
+            "jd_required_level": "basic",
+            "assessed_level": "basic",
+            "assessment_score": 0.4  # < 0.60, so fallback should be Upgrade Needed
+        }
+        res = evaluator.predict_single(input_dict)
+        self.assertEqual(res["recommendation"], "Upgrade Needed")
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pytest
 from app.schemas.skill_analysis import FinalSkillItemSchema
 from app.services.aggregation_service import aggregate_final_assessment

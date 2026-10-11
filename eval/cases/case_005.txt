@@ -1,0 +1,6 @@
+[SYNTHETIC CV] Data Analyst
+Experience: 5 years in software.
+Used SQL extensively in production.
+Used Python extensively in production.
+Used Tableau extensively in production.
+Used Statistics extensively in production.

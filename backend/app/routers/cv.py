@@ -6,8 +6,8 @@ from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, Dep
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.services.cv_service import process_cv
-from app.services.pdf_service import extract_pdf_text
+from app.services.cv_service import process_cv, extract_pdf_text
+from app.services.requirement_service import extract_requirements, evaluate_cv_with_gemini
 from app.services.matching_service import match_skills_in_text
 from app.services.scoring_service import calculate_skill_score
 from app.services.skill_analysis_service import combine_cv_and_assessment
@@ -147,9 +147,24 @@ def get_past_analysis_sessions(
         combined = {"skills": []}
 
         if parsed_skills:
-            matched_skills, missing_skills = match_skills_in_text(cv_text, parsed_skills) if cv_text else ([], parsed_skills)
+            if a.raw_analysis_data:
+                try:
+                    evaluated_skills = json.loads(a.raw_analysis_data)
+                except Exception:
+                    evaluated_skills = []
+            else:
+                evaluated_skills = []
+
+            if not evaluated_skills:
+                evaluated_skills = [
+                    {"skill": s.get("skill"), "required_level": s.get("level", "unspecified"), "importance": s.get("importance", "required"), "cv_level": "not_found", "cv_match_status": "Missing", "evidence": None}
+                    for s in parsed_skills if isinstance(s, dict)
+                ]
+            matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
+            missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
             score_data = calculate_skill_score(matched_skills, missing_skills)
             combined = combine_cv_and_assessment({
+                "skills": evaluated_skills,
                 "matched_skills": matched_skills,
                 "missing_skills": missing_skills,
                 "score_data": score_data
@@ -199,6 +214,7 @@ def get_past_analysis_sessions(
 @router.get("/cv/sessions/{analysis_id}")
 def get_analysis_session_detail(
     analysis_id: int,
+    force_reanalyze: bool = Query(False, description="Explicitly request reanalysis via Gemini"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required)
 ):
@@ -221,12 +237,43 @@ def get_analysis_session_detail(
         pdf_data = extract_pdf_text(cv_record.file_path)
         cv_text = pdf_data.get("text", "")
 
-    matched_skills, missing_skills = match_skills_in_text(cv_text, parsed_requirements)
+    if analysis_record.raw_analysis_data and not force_reanalyze:
+        evaluated_skills = json.loads(analysis_record.raw_analysis_data)
+    else:
+        if not force_reanalyze and not analysis_record.raw_analysis_data:
+            # Fallback for old sessions without Gemini invocation
+            evaluated_skills = [
+                {
+                    "skill": s.get("skill"), 
+                    "required_level": s.get("level", "unspecified"), 
+                    "importance": s.get("importance", "required"), 
+                    "cv_level": "unspecified", 
+                    "cv_match_status": "Missing", 
+                    "evidence": None,
+                    "actionable_feedback": None
+                }
+                for s in parsed_requirements if isinstance(s, dict)
+            ]
+        else:
+            evaluated_skills = evaluate_cv_with_gemini(cv_text, parsed_requirements) if cv_text else []
+            if not evaluated_skills:
+                evaluated_skills = [
+                    {"skill": s.get("skill"), "required_level": s.get("level", "unspecified"), "importance": s.get("importance", "required"), "cv_level": "not_found", "cv_match_status": "Missing", "evidence": None, "actionable_feedback": None}
+                    for s in parsed_requirements if isinstance(s, dict)
+                ]
+            
+            if force_reanalyze:
+                analysis_record.raw_analysis_data = json.dumps(evaluated_skills)
+                db.commit()
+
+    matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
+    missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
     score_data = calculate_skill_score(matched_skills, missing_skills)
 
     cv_matching_result = {
         "filename": cv_record.file_name if cv_record else "Resume.pdf",
         "pages": 1,
+        "skills": evaluated_skills,
         "matched_skills": matched_skills,
         "missing_skills": missing_skills,
         "score_data": score_data
@@ -244,23 +291,32 @@ def get_analysis_session_detail(
 async def upload_cv(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_required)
 ):
     """
     Processes an uploaded CV PDF file and returns extracted text and metadata.
-    Persists CV record if user is authenticated.
+    Persists CV record for authenticated users.
     """
     cv_data = await process_cv(file)
-    if current_user:
-        cv_record = CV(
-            user_id=current_user.id,
-            file_name=cv_data.get("filename", "Uploaded_Resume.pdf"),
-            file_path=cv_data.get("file_path", "")
-        )
-        db.add(cv_record)
+    cv_record = CV(
+        user_id=current_user.id,
+        file_name=cv_data.get("filename", "Uploaded_Resume.pdf"),
+        file_path=cv_data.get("file_path", "")
+    )
+    db.add(cv_record)
+    try:
         db.commit()
         db.refresh(cv_record)
         cv_data["cv_id"] = cv_record.id
+    except Exception:
+        db.rollback()
+        file_path = cv_data.get("file_path")
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail="Failed to save CV record")
     return cv_data
 
 
@@ -281,7 +337,14 @@ async def analyze_cv(
     Persists CV, Job, and Analysis session records for logged in candidates.
     Returns matched skills, missing skills, combined assessment results, level gaps, and scores.
     """
-    effective_user_id = user_id if user_id is not None else (user_id_query if user_id_query is not None else (current_user.id if current_user else None))
+    if user_id is not None or user_id_query is not None:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to specify user_id")
+        provided_user_id = user_id if user_id is not None else user_id_query
+        if provided_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to act on behalf of this user")
+            
+    effective_user_id = current_user.id if current_user else None
 
     # 1. Parse and validate requirements JSON payload
     parsed_requirements = parse_and_validate_requirements(requirements)
@@ -301,13 +364,35 @@ async def analyze_cv(
                 file_path=cv_data.get("file_path", "")
             )
             db.add(cv_record)
-            db.commit()
-            db.refresh(cv_record)
+            try:
+                db.commit()
+                db.refresh(cv_record)
+            except Exception:
+                db.rollback()
+                if cv_data.get("file_path") and os.path.exists(cv_data["file_path"]):
+                    try:
+                        os.remove(cv_data["file_path"])
+                    except OSError:
+                        pass
+                raise HTTPException(status_code=500, detail="Failed to save CV record")
+        else:
+            # Clean up temporary uploaded file for unauthenticated users
+            if cv_data.get("file_path") and os.path.exists(cv_data["file_path"]):
+                try:
+                    os.remove(cv_data["file_path"])
+                except OSError:
+                    pass
     else:
         # Search for saved CV by cv_id or latest for effective_user_id
-        if cv_id and effective_user_id:
-            cv_record = db.query(CV).filter(CV.id == cv_id, CV.user_id == effective_user_id).first()
-        if not cv_record and effective_user_id:
+        if cv_id:
+            if not effective_user_id:
+                raise HTTPException(status_code=401, detail="Authentication required to access saved CVs")
+            cv_record = db.query(CV).filter(CV.id == cv_id).first()
+            if not cv_record:
+                raise HTTPException(status_code=404, detail="CV not found")
+            if cv_record.user_id != effective_user_id:
+                raise HTTPException(status_code=403, detail="Not authorized to access this CV")
+        elif effective_user_id:
             cv_record = db.query(CV).filter(CV.user_id == effective_user_id).order_by(CV.uploaded_at.desc()).first()
 
         if cv_record and cv_record.file_path and os.path.exists(cv_record.file_path):
@@ -326,8 +411,10 @@ async def analyze_cv(
 
     cv_text = cv_data.get("text", "")
 
-    # 3. Match required skills against CV text
-    matched_skills, missing_skills = match_skills_in_text(cv_text, parsed_requirements)
+    # 3. Evaluate candidate CV against requirements using Gemini
+    evaluated_skills = evaluate_cv_with_gemini(cv_text, parsed_requirements)
+    matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
+    missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
 
     # 4. Calculate skill score breakdown
     score_data = calculate_skill_score(matched_skills, missing_skills)
@@ -346,25 +433,31 @@ async def analyze_cv(
         db.commit()
         db.refresh(job_record)
 
-        overall_val = score_data.get("match_percentage") if score_data else 0
+        overall_val = score_data.get("score", 0) if score_data else 0
         analysis_record = Analysis(
             user_id=effective_user_id,
             job_id=job_record.id,
             cv_id=cv_record.id if cv_record else 1,
-            overall_score=overall_val
+            overall_score=overall_val,
+            raw_analysis_data=json.dumps(evaluated_skills)
         )
         db.add(analysis_record)
         db.commit()
-
 
     # 6. Build raw matching result
     cv_matching_result = {
         "filename": cv_data.get("filename"),
         "pages": cv_data.get("pages"),
+        "skills": evaluated_skills,
         "matched_skills": matched_skills,
         "missing_skills": missing_skills,
         "score_data": score_data
     }
 
-    # 7. Combine CV matching with completed PostgreSQL assessment results
+    # 7. Combine CV matching with completed assessment results
     return combine_cv_and_assessment(cv_matching_result, db_or_assessments=db, user_id=effective_user_id)
+
+@router.get("/debug")
+def debug_env():
+    import os
+    return {"mock": os.environ.get("GEMINI_MOCK"), "model": os.environ.get("GROQ_MODEL")}

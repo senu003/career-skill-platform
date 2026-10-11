@@ -58,15 +58,25 @@ export function AssessmentProvider({ children }) {
 
   // Auto-restore latest session from API if no active analysis in memory/localStorage
   useEffect(() => {
+    let isCancelled = false;
     if (!analysisResult) {
       const fetchLatestSession = async () => {
         try {
           const sessRes = await fetchWithAuth('/cv/sessions');
+          if (isCancelled) return;
           if (sessRes?.sessions && sessRes.sessions.length > 0) {
             const latestSess = sessRes.sessions[0];
             const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
+            if (isCancelled) return;
             if (detailRes) {
-              setAnalysisResult(detailRes);
+              setAnalysisResultState((prev) => {
+                // Never overwrite a freshly set or active analysis
+                if (prev) return prev;
+                try {
+                  localStorage.setItem('career_platform_analysis', JSON.stringify(detailRes));
+                } catch (e) {}
+                return detailRes;
+              });
             }
           }
         } catch (err) {
@@ -75,6 +85,9 @@ export function AssessmentProvider({ children }) {
       };
       fetchLatestSession();
     }
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   return (

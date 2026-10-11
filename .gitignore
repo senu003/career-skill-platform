@@ -12,7 +12,8 @@ env/
 
 # Python cache & compiled files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.pyo
 *.pyd
 .pytest_cache/
@@ -22,6 +23,7 @@ htmlcov/
 # User uploaded files & data databases
 uploads/
 backend/uploads/
+*.pdf
 *.db
 *.sqlite3
 
@@ -48,3 +50,16 @@ backend/models/*.joblib
 # Training / synthetic datasets (generated via ML scripts)
 backend/data/*.csv
 backend/app/ml/synthetic/
+
+# Eval data & cache
+eval/raw/
+eval/cache/
+backend/eval/cache/
+
+# Debug and scratch files
+/*.txt
+!/requirements.txt
+/groq_*.json
+/mock_out*.json
+/req.json
+/temp_*.py

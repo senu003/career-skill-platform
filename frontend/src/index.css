@@ -866,13 +866,198 @@ body {
 /* Empty State Card */
 .empty-history-card {
   background: #ffffff;
-  border: 1px border var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 3.5rem 2rem;
   text-align: center;
   box-shadow: var(--shadow-sm);
 }
 
+/* AI Tooltip */
+.ai-tooltip-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-600);
+  cursor: help;
+  padding: 2px;
+  border-radius: 4px;
+  outline: none;
+  transition: color 0.15s ease;
+}
 
+.ai-tooltip-trigger:hover,
+.ai-tooltip-trigger:focus-visible {
+  color: var(--primary-800);
+}
 
+.ai-tooltip-bubble {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #1e1b4b;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  z-index: 50;
+}
 
+.ai-tooltip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #1e1b4b;
+}
+
+.ai-tooltip-trigger:hover .ai-tooltip-bubble,
+.ai-tooltip-trigger:focus-visible .ai-tooltip-bubble {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Filter Chips */
+.filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.filter-chip:hover {
+  border-color: var(--primary-300);
+  color: var(--primary-700);
+  background-color: var(--primary-50);
+}
+
+.filter-chip.active {
+  background-color: var(--primary-600);
+  border-color: var(--primary-600);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+}
+
+.filter-chip:focus-visible {
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3);
+}
+
+.filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.filter-chip.active .filter-chip-count {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Text link button for matched skills */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  color: var(--primary-600);
+  font-weight: 600;
+  font-size: 0.825rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.btn-link:hover {
+  color: var(--primary-800);
+  background-color: var(--primary-50);
+}
+
+.btn-link:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+}
+
+/* Accessibility Focus States */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+}
+
+/* Mobile Responsive Optimization (375px) */
+@media (max-width: 480px) {
+  .container {
+    padding: 1rem 0.75rem;
+  }
+  .card {
+    padding: 1.25rem 1rem;
+    margin-bottom: 1rem;
+  }
+  .match-score-card {
+    padding: 1.25rem 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .match-score-details {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  .match-stat-item {
+    min-width: unset;
+    padding: 0.5rem 0.25rem;
+  }
+  .skill-card {
+    padding: 0.875rem 0.75rem;
+  }
+  .filter-chips {
+    gap: 0.35rem;
+  }
+  .filter-chip {
+    padding: 0.25rem 0.65rem;
+    font-size: 0.75rem;
+  }
+}

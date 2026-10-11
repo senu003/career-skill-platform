@@ -41,7 +41,13 @@ def start_assessment(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
-    effective_user_id = payload.user_id if payload.user_id is not None else (current_user.id if current_user else None)
+    if payload.user_id is not None:
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to specify user_id")
+        if payload.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to start assessment for this user")
+            
+    effective_user_id = current_user.id if current_user else None
     res = assessment_service.start_assessment(
         db=db,
         skill=payload.skill,
@@ -76,7 +82,13 @@ def get_assessment_result_by_skill(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
-    effective_user_id = user_id if user_id is not None else (current_user.id if current_user else None)
+    if user_id is not None:
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to specify user_id")
+        if user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this user's result")
+            
+    effective_user_id = current_user.id if current_user else None
     res = skill_analysis_service.get_assessment_result_for_skill(db=db, skill=skill, user_id=effective_user_id)
     if not res:
         raise HTTPException(

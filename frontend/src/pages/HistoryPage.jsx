@@ -706,29 +706,21 @@ export default function HistoryPage() {
                       <div>
                         <div className="font-semibold text-sm text-main flex items-center gap-2">
                           <span>{skillName}</span>
-                          {!supported && (
-                            <span className="text-xs text-muted font-normal" style={{ fontSize: '0.7rem' }}>
-                              (Assessment Unavailable)
-                            </span>
-                          )}
+                          <span className="text-xs text-muted font-normal" style={{ fontSize: '0.7rem' }}>
+                            (Not assessed yet)
+                          </span>
                         </div>
                         <div className="text-xs text-muted">Required Level: {reqLvl}</div>
                       </div>
 
-                      {supported ? (
-                        <button
-                          onClick={() => handleLaunchSkillAssessment(skillName)}
-                          className="btn btn-primary text-xs flex items-center gap-1.5"
-                          style={{ padding: '0.35rem 0.75rem' }}
-                        >
-                          <Play size={13} />
-                          <span>Redo Test</span>
-                        </button>
-                      ) : (
-                        <button disabled className="btn btn-outline text-xs" style={{ opacity: 0.5, cursor: 'not-allowed', padding: '0.35rem 0.75rem' }}>
-                          Unavailable
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleLaunchSkillAssessment(skillName)}
+                        className="btn btn-primary text-xs flex items-center gap-1.5"
+                        style={{ padding: '0.35rem 0.75rem' }}
+                      >
+                        <Play size={13} />
+                        <span>Take assessment</span>
+                      </button>
                     </div>
                   );
                 })}

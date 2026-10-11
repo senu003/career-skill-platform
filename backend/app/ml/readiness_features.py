@@ -137,6 +137,42 @@ def extract_model2_features(combined_analysis: Dict[str, Any]) -> Dict[str, floa
     }
 
 
+def is_skill_gap(skill_item: Dict[str, Any]) -> bool:
+    """
+    Determines if a skill represents a gap:
+    Missing, Needs Improvement, or assessed-below-required.
+    """
+    cv_status = skill_item.get("cv_match_status")
+    matched = skill_item.get("matched")
+    level_gap = skill_item.get("level_gap")
+    rec = skill_item.get("skill_recommendation")
+    req_level = skill_item.get("required_level") or skill_item.get("level")
+    assessed_level = skill_item.get("assessed_level")
+
+    # 1. Missing from CV
+    if cv_status == "Missing" or matched is False:
+        return True
+    # 2. Needs Improvement
+    if cv_status == "Needs Improvement":
+        return True
+    # 3. Assessed below required
+    if level_gap is not None:
+        try:
+            if float(level_gap) > 0:
+                return True
+        except (ValueError, TypeError):
+            pass
+    if assessed_level and req_level:
+        req_val = LEVEL_MAP.get(str(req_level).lower().strip(), 0)
+        ass_val = LEVEL_MAP.get(str(assessed_level).lower().strip(), 0)
+        if ass_val > 0 and req_val > 0 and ass_val < req_val:
+            return True
+    # 4. Recommendation indicates weakness / gap
+    if rec in ["Upgrade Needed", "Re-learn Basics"]:
+        return True
+    return False
+
+
 def calculate_skill_priority_score(skill_item: Dict[str, Any]) -> Dict[str, Any]:
     """
     Calculates transparent priority score and explanation for a single skill.
@@ -149,10 +185,13 @@ def calculate_skill_priority_score(skill_item: Dict[str, Any]) -> Dict[str, Any]
 
     level_gap = skill_item.get("level_gap")
     matched = bool(skill_item.get("matched", True))
+    cv_status = skill_item.get("cv_match_status")
 
     if level_gap is not None:
         normalized_skill_gap = min(1.0, max(0.0, float(level_gap) / 3.0))
-    elif not matched:
+    elif not matched or cv_status == "Missing":
+        normalized_skill_gap = min(1.0, max(0.33, float(req_level_val) / 3.0))
+    elif cv_status == "Needs Improvement":
         normalized_skill_gap = min(1.0, max(0.33, float(req_level_val) / 3.0))
     else:
         normalized_skill_gap = 0.1
@@ -178,9 +217,12 @@ def calculate_skill_priority_score(skill_item: Dict[str, Any]) -> Dict[str, Any]
     elif rec == "Mastered":
         weakness_factor = 0.2
         reason = "Skill fully mastered"
-    elif not matched:
+    elif not matched or cv_status == "Missing":
         weakness_factor = 1.1
-        reason = "Required skill missing from CV"
+        reason = "Required skill missing from CV" if importance_str != "preferred" else "Preferred skill missing from CV"
+    elif cv_status == "Needs Improvement":
+        weakness_factor = 1.1
+        reason = "Skill needs improvement based on CV evidence"
     elif level_gap is not None and level_gap > 0:
         weakness_factor = 1.1
         reason = f"Level gap of {level_gap} identified"
@@ -202,19 +244,50 @@ def calculate_skill_priority_score(skill_item: Dict[str, Any]) -> Dict[str, Any]
         "assessed_level": skill_item.get("assessed_level"),
         "level_gap": level_gap,
         "skill_recommendation": skill_item.get("skill_recommendation"),
-        "recommendation_confidence": skill_item.get("recommendation_confidence")
+        "recommendation_confidence": skill_item.get("recommendation_confidence"),
+        "importance": skill_item.get("importance", "required")
     }
 
 
-def compute_priority_skills(skills: List[Dict[str, Any]], top_n: int = 5) -> List[Dict[str, Any]]:
+def compute_priority_skills(
+    skills: List[Dict[str, Any]],
+    top_n: int = 5,
+    gaps_only: bool = False
+) -> List[Dict[str, Any]]:
     """
-    Computes priority scores for all required skills and returns the top N ranked skills.
+    Computes priority scores for skills and returns the top N ranked skills.
+    When gaps_only is True, filters to only gaps (Missing, Needs Improvement, assessed-below-required)
+    and orders Required before Preferred, then largest gap first.
     """
     if not skills:
         return []
 
-    ranked = [calculate_skill_priority_score(s) for s in skills]
+    target_skills = [s for s in skills if is_skill_gap(s)] if gaps_only else skills
+    if not target_skills:
+        return []
 
-    # Sort deterministically by priority_score desc, then skill name asc
-    ranked.sort(key=lambda x: (-x["priority_score"], str(x["skill"]).lower()))
+    ranked = [calculate_skill_priority_score(s) for s in target_skills]
+
+    if gaps_only:
+        def _gap_sort_key(item: Dict[str, Any]):
+            imp = str(item.get("importance", "required")).lower().strip()
+            is_req = 0 if imp != "preferred" else 1
+
+            gap = item.get("level_gap")
+            if gap is not None:
+                try:
+                    gap_val = float(gap)
+                except (ValueError, TypeError):
+                    gap_val = 0.0
+            else:
+                req_str = str(item.get("required_level") or "basic").lower().strip()
+                gap_val = float(LEVEL_MAP.get(req_str, 1))
+
+            return (is_req, -gap_val, -item.get("priority_score", 0.0), str(item.get("skill", "")).lower())
+
+        ranked.sort(key=_gap_sort_key)
+    else:
+        # Sort deterministically by priority_score desc, then skill name asc
+        ranked.sort(key=lambda x: (-x["priority_score"], str(x["skill"]).lower()))
+
     return ranked[:top_n]

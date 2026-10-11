@@ -24,6 +24,7 @@ class TestStep14E2EValidation:
 
     @pytest.fixture(autouse=True)
     def setup_db(self):
+        os.environ['GEMINI_MOCK'] = '1'
         self.db = SessionLocal()
         # Cleanup test data
         self.db.execute(text("DELETE FROM assessment_attempts WHERE user_id IN (901, 902, 903, 904)"))
@@ -86,18 +87,20 @@ class TestStep14E2EValidation:
             "text": "Experienced Senior Developer skilled in React with 4 years experience, JavaScript frontend engineering, and basic PostgreSQL query knowledge."
         }
 
+        import uuid
+        uid = str(uuid.uuid4())[:8]
         # 1. Register candidate A
         reg_res = client.post("/users", json={
             "name": "Validation Candidate A",
-            "email": "step14_cand_a@example.com",
+            "email": f"step14_cand_a_{uid}@example.com",
             "password": "Password123!"
         })
         assert reg_res.status_code == 200, f"Registration failed: {reg_res.text}"
         cand_a_id = reg_res.json()["id"]
-
+    
         # 2. Login candidate A
         login_res = client.post("/login", data={
-            "username": "step14_cand_a@example.com",
+            "username": f"step14_cand_a_{uid}@example.com",
             "password": "Password123!"
         })
         assert login_res.status_code == 200, f"Login failed: {login_res.text}"
@@ -107,7 +110,7 @@ class TestStep14E2EValidation:
         # 3. Upload CV file
         cv_content = b"%PDF-1.4 mock pdf content"
         files = {"file": ("resume.pdf", cv_content, "application/pdf")}
-        cv_res = client.post("/cv/upload", files=files)
+        cv_res = client.post("/cv/upload", files=files, headers=headers_a)
         assert cv_res.status_code == 200, f"CV Upload failed: {cv_res.text}"
         extracted_text = cv_res.json()["text"]
 
@@ -121,7 +124,8 @@ class TestStep14E2EValidation:
         cv_analyze_res = client.post(
             "/cv/analyze",
             files={"file": ("resume.pdf", cv_content, "application/pdf")},
-            data={"requirements": json.dumps(extracted_reqs), "user_id": cand_a_id}
+            data={"requirements": json.dumps(extracted_reqs), "user_id": cand_a_id},
+            headers=headers_a
         )
         assert cv_analyze_res.status_code == 200, f"CV Analyze failed: {cv_analyze_res.text}"
 

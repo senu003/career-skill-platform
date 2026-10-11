@@ -30,13 +30,16 @@ export default function ResultsPage() {
 
   // Auto-restore latest session from backend if analysisResult is empty
   useEffect(() => {
+    let isCancelled = false;
     if (!analysisResult) {
       const restoreLatestSession = async () => {
         try {
           const sessRes = await fetchWithAuth('/cv/sessions');
+          if (isCancelled) return;
           if (sessRes?.sessions && sessRes.sessions.length > 0) {
             const latestSess = sessRes.sessions[0];
             const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
+            if (isCancelled) return;
             if (detailRes) {
               setAnalysisResult(detailRes);
             }
@@ -47,6 +50,9 @@ export default function ResultsPage() {
       };
       restoreLatestSession();
     }
+    return () => {
+      isCancelled = true;
+    };
   }, [analysisResult]);
 
   const fetchResult = async () => {

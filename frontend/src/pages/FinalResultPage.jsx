@@ -22,6 +22,7 @@ import {
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
+import CVFeedbackCard from '../components/CVFeedbackCard';
 
 // Static explanation mapping for Model 1 recommendation labels
 const RECOMMENDATION_EXPLANATIONS = {
@@ -137,14 +138,17 @@ export default function FinalResultPage() {
 
   // Auto-restore latest session if analysisResult is empty
   useEffect(() => {
+    let isCancelled = false;
     if (!analysisResult) {
       const restoreLatestSession = async () => {
         setLoadingAgg(true);
         try {
           const sessRes = await fetchWithAuth('/cv/sessions');
+          if (isCancelled) return;
           if (sessRes?.sessions && sessRes.sessions.length > 0) {
             const latestSess = sessRes.sessions[0];
             const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
+            if (isCancelled) return;
             if (detailRes) {
               setAnalysisResult(detailRes);
             }
@@ -152,11 +156,14 @@ export default function FinalResultPage() {
         } catch (err) {
           console.warn('Could not restore latest session:', err);
         } finally {
-          setLoadingAgg(false);
+          if (!isCancelled) setLoadingAgg(false);
         }
       };
       restoreLatestSession();
     }
+    return () => {
+      isCancelled = true;
+    };
   }, [analysisResult]);
 
   const skillsList = analysisResult?.skills || [
@@ -397,7 +404,7 @@ export default function FinalResultPage() {
             const isAssessed = item.assessed_level !== null && item.assessed_level !== undefined;
             const reqLvl = formatLevel(item.required_level || item.level);
             const assessedLvl = formatLevel(item.assessed_level);
-            const cvLvlDisplay = item.cv_level ? formatLevel(item.cv_level) : (item.matched ? 'Detected in CV' : 'Not found in CV');
+            const cvLvlDisplay = item.cv_level && item.cv_level !== 'not_found' ? formatLevel(item.cv_level) : (item.matched ? 'Detected in CV' : 'Not found in CV');
             
             // Model 1 Recommendation resolution
             const recLabel = item.skill_recommendation || item.recommendation || (isAssessed ? 'Assessment Completed' : (supported ? 'Assessment Pending' : 'CV Evaluation Only'));
@@ -538,6 +545,11 @@ export default function FinalResultPage() {
             );
           })}
         </div>
+      </div>
+
+      {/* NEW: RECOMMENDED CV IMPROVEMENTS */}
+      <div className="mb-6">
+        <CVFeedbackCard feedbackList={skillsList.filter(s => s.actionable_feedback)} />
       </div>
 
       {/* 5. CONSOLIDATED ACTIONABLE GROWTH PLAN */}

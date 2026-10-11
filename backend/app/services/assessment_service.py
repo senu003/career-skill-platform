@@ -7,35 +7,50 @@ from fastapi import HTTPException, status
 from app.models import AssessmentQuestion, QuestionOption, AssessmentAttempt, AssessmentAnswer
 from app.schemas.assessment import QuestionSchema
 
+import re
+
 SUPPORTED_SKILLS = {
     "javascript": "JavaScript",
+    "js": "JavaScript",
     "react": "React",
     "postgresql": "PostgreSQL",
     "postgres": "PostgreSQL",
-    "js": "JavaScript"
+    "sql": "PostgreSQL",
+    "python": "Python",
+    "py": "Python",
+    "python3": "Python",
+    "docker": "Docker"
 }
 
 LEVEL_SEQUENCE = ["basic", "intermediate", "advanced"]
 
 
 def get_supported_skills_list() -> List[str]:
-    return ["JavaScript", "React", "PostgreSQL"]
+    return ["JavaScript", "React", "PostgreSQL", "SQL", "Python", "Docker"]
 
 
 def is_skill_supported(skill_input: str) -> bool:
     if not skill_input:
         return False
     cleaned = skill_input.strip().lower()
-    return cleaned in SUPPORTED_SKILLS
+    if cleaned in SUPPORTED_SKILLS:
+        return True
+    simplified = re.sub(r'[^a-z0-9]', '', cleaned)
+    for k in SUPPORTED_SKILLS:
+        if simplified == re.sub(r'[^a-z0-9]', '', k):
+            return True
+    return False
 
 
 def normalize_skill(skill_input: str) -> str:
+    if not skill_input:
+        return ""
     cleaned = skill_input.strip().lower()
     if cleaned in SUPPORTED_SKILLS:
         return SUPPORTED_SKILLS[cleaned]
-    # Check case-insensitive match in db
+    simplified = re.sub(r'[^a-z0-9]', '', cleaned)
     for k, v in SUPPORTED_SKILLS.items():
-        if k == cleaned:
+        if simplified == re.sub(r'[^a-z0-9]', '', k):
             return v
     return skill_input.strip()
 
@@ -197,7 +212,7 @@ def start_assessment(db: Session, skill: str, required_level: str, user_id: Opti
     if not q_exists:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported skill '{skill}'. Initial assessment supports: JavaScript, React, PostgreSQL."
+            detail=f"Unsupported skill '{skill}'. Initial assessment supports: JavaScript, React, PostgreSQL, SQL, Python, Docker."
         )
 
     attempt = AssessmentAttempt(
@@ -395,22 +410,6 @@ def get_attempt_details(db: Session, attempt_id: int) -> Dict[str, Any]:
 
     target_level = active_level if active_level else (last_passed or "basic")
     questions = fetch_questions_for_level(db, attempt.skill, target_level, user_id=attempt.user_id)
-
-    return {
-        "attempt_id": attempt.id,
-        "user_id": attempt.user_id,
-        "skill": attempt.skill,
-        "required_level": attempt.required_level,
-        "cv_level": attempt.cv_level,
-        "assessed_level": attempt.assessed_level,
-        "current_level": active_level if not attempt.completed_at else None,
-        "is_completed": attempt.completed_at is not None,
-        "started_at": attempt.started_at.isoformat() if attempt.started_at else "",
-        "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None,
-        "answers_count": len(answers),
-        "questions": questions,
-        "submitted_answers": submitted_answers_list
-    }
 
     return {
         "attempt_id": attempt.id,

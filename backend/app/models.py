@@ -111,6 +111,7 @@ class Analysis(Base):
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
     cv_id = Column(Integer, ForeignKey("cvs.id"), nullable=False)
     overall_score = Column(Numeric(5, 2))
+    raw_analysis_data = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

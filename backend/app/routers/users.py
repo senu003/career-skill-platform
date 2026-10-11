@@ -44,6 +44,8 @@ def create_user(
     db: Session = Depends(get_db)
 ):
 
+    from sqlalchemy.exc import IntegrityError
+    
     hashed_password = bcrypt.hashpw(
         user_data.password.encode("utf-8"),
         bcrypt.gensalt()
@@ -56,8 +58,12 @@ def create_user(
     )
 
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     return {
         "id": user.id,
@@ -79,7 +85,12 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if not bcrypt.checkpw(form_data.password.encode('utf-8'), user.password_hash.encode('utf-8')):
+    try:
+        is_valid = bcrypt.checkpw(form_data.password.encode('utf-8'), user.password_hash.encode('utf-8'))
+    except ValueError:
+        is_valid = False
+        
+    if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

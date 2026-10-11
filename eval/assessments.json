@@ -1,0 +1,494 @@
+{
+  "case_001": {
+    "skills": {
+      "SQL": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Python": {
+        "assessed_level": "basic",
+        "total_score": 0.85
+      },
+      "Tableau": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Statistics": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_002": {
+    "skills": {
+      "Python": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "Django": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "PostgreSQL": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.85
+      },
+      "AWS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_003": {
+    "skills": {
+      "JavaScript": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "React": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "CSS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "TypeScript": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_004": {
+    "skills": {
+      "Python": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "Machine Learning": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "PyTorch": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "AWS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_005": {
+    "skills": {
+      "SQL": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Python": {
+        "assessed_level": "basic",
+        "total_score": 0.85
+      },
+      "Tableau": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Statistics": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_006": {
+    "skills": {
+      "Python": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "Django": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "PostgreSQL": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.85
+      },
+      "AWS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_007": {
+    "skills": {
+      "JavaScript": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "React": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "CSS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "TypeScript": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_008": {
+    "skills": {
+      "Python": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "Machine Learning": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "PyTorch": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "AWS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_009": {
+    "skills": {
+      "SQL": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Python": {
+        "assessed_level": "basic",
+        "total_score": 0.85
+      },
+      "Tableau": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Statistics": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_010": {
+    "skills": {
+      "Python": {
+        "assessed_level": "advanced",
+        "total_score": 0.85
+      },
+      "Django": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "PostgreSQL": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.85
+      },
+      "AWS": {
+        "assessed_level": "intermediate",
+        "total_score": 0.85
+      }
+    }
+  },
+  "case_011": {
+    "skills": {
+      "React": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "CSS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "TypeScript": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_012": {
+    "skills": {
+      "Machine Learning": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "PyTorch": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_013": {
+    "skills": {
+      "Python": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "Tableau": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "Statistics": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_014": {
+    "skills": {
+      "Django": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "PostgreSQL": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_015": {
+    "skills": {
+      "React": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "CSS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "TypeScript": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_016": {
+    "skills": {
+      "Machine Learning": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "PyTorch": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_017": {
+    "skills": {
+      "Python": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "Tableau": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "Statistics": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_018": {
+    "skills": {
+      "Django": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "PostgreSQL": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_019": {
+    "skills": {
+      "React": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "CSS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "TypeScript": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_020": {
+    "skills": {
+      "Machine Learning": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "PyTorch": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.6
+      }
+    }
+  },
+  "case_021": {
+    "skills": {
+      "Tableau": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_022": {
+    "skills": {
+      "PostgreSQL": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_023": {
+    "skills": {
+      "TypeScript": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_024": {
+    "skills": {
+      "PyTorch": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_025": {
+    "skills": {
+      "Tableau": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_026": {
+    "skills": {
+      "PostgreSQL": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_027": {
+    "skills": {
+      "TypeScript": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_028": {
+    "skills": {
+      "PyTorch": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_029": {
+    "skills": {
+      "Tableau": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  },
+  "case_030": {
+    "skills": {
+      "PostgreSQL": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "Docker": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      },
+      "AWS": {
+        "assessed_level": "basic",
+        "total_score": 0.3
+      }
+    }
+  }
+}

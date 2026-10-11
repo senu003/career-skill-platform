@@ -1,0 +1,5 @@
+[SYNTHETIC CV] Backend Developer
+Experience: 5 years in software.
+Heard of PostgreSQL.
+Heard of Docker.
+Heard of AWS.

@@ -99,6 +99,8 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
 
     # Model 2 Predictor call for dynamic candidate readiness verdict
     final_verdict = None
+    readiness_verdict = None
+    readiness_reasons = None
     recommendation_confidence = None
     try:
         from app.ml.predict_readiness import predict_final_recommendation
@@ -107,6 +109,8 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         }
         m2_res = predict_final_recommendation(payload_dict)
         final_verdict = m2_res.get("final_verdict")
+        readiness_verdict = m2_res.get("readiness_verdict") or final_verdict
+        readiness_reasons = m2_res.get("readiness_reasons")
         recommendation_confidence = m2_res.get("confidence")
     except Exception:
         pass
@@ -134,6 +138,8 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         preferred_skills_summary=pref_summary,
         readiness_status=readiness_status,
         final_verdict=final_verdict,
+        readiness_verdict=readiness_verdict,
+        readiness_reasons=readiness_reasons,
         recommendation_confidence=recommendation_confidence,
         overall_improvement_probability=overall_improvement_probability,
         skills=skills

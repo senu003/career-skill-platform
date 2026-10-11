@@ -1,0 +1,6 @@
+[SYNTHETIC CV] Backend Developer
+Experience: 5 years in software.
+Familiar with Django.
+Familiar with PostgreSQL.
+Familiar with Docker.
+Familiar with AWS.

@@ -1,0 +1,6 @@
+[SYNTHETIC CV] ML Engineer
+Experience: 5 years in software.
+Used Python extensively in production.
+Used ML extensively in production.
+Used PyTorch extensively in production.
+Used AWS extensively in production.

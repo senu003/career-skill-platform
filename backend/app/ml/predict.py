@@ -94,6 +94,17 @@ class SkillLevelPredictor:
 
         return validated
 
+    def _deterministic_verdict(self, features: Dict[str, Any]) -> str:
+        b = features.get("basic_score", 0.0)
+        i = features.get("intermediate_score", 0.0)
+        a = features.get("advanced_score", 0.0)
+        if a >= 0.70 or (a >= 0.50 and i >= 0.80):
+            return "advanced"
+        elif i >= 0.60:
+            return "intermediate"
+        else:
+            return "basic"
+
     def predict_single(self, feature_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
         Predicts skill proficiency level for a single candidate skill record.
@@ -103,23 +114,43 @@ class SkillLevelPredictor:
 
         Returns:
             dict: {
-                "predicted_level": str ("basic"|"intermediate"|"advanced"),
-                "probabilities": dict {class_name: float}
+                "predicted_level": str ("basic"|"intermediate"|"advanced"), # Primary
+                "rules_predicted_level": str,
+                "ml_predicted_level": str or None,
+                "probabilities": dict {class_name: float},
+                "ml_override_attempted": bool
             }
         """
         validated = self.validate_feature_dict(feature_dict)
-        df_input = pd.DataFrame([validated])[REQUIRED_FEATURES]
         
-        predicted_class = str(self.pipeline.predict(df_input)[0])
+        rules_level = self._deterministic_verdict(validated)
+        
+        ml_level = None
         probabilities = {}
-        if hasattr(self.pipeline, "predict_proba"):
-            probs = self.pipeline.predict_proba(df_input)[0]
-            classes = list(self.pipeline.classes_)
-            probabilities = {cls_name: round(float(prob), 4) for cls_name, prob in zip(classes, probs)}
+        if self.pipeline is not None:
+            try:
+                import logging
+                df_input = pd.DataFrame([validated])[REQUIRED_FEATURES]
+                ml_level = str(self.pipeline.predict(df_input)[0])
+                if hasattr(self.pipeline, "predict_proba"):
+                    probs = self.pipeline.predict_proba(df_input)[0]
+                    classes = list(self.pipeline.classes_)
+                    probabilities = {cls_name: round(float(prob), 4) for cls_name, prob in zip(classes, probs)}
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"ML Predictor Challenger failed: {e}")
+
+        ml_override_attempted = (ml_level is not None and ml_level != rules_level)
+        if ml_override_attempted:
+            import logging
+            logging.getLogger(__name__).info(f"SkillLevelPredictor ML override attempt: predicted '{ml_level}', rules said '{rules_level}'")
 
         return {
-            "predicted_level": predicted_class,
-            "probabilities": probabilities
+            "predicted_level": rules_level,
+            "rules_predicted_level": rules_level,
+            "ml_predicted_level": ml_level,
+            "probabilities": probabilities,
+            "ml_override_attempted": ml_override_attempted
         }
 
     def predict_batch(self, feature_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
