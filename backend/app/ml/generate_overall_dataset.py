@@ -187,17 +187,14 @@ def generate_overall_dataset(num_samples: int = 500, random_seed: int = 42) -> p
         # Compute synthetic composite target label
         target_label = compute_synthetic_target_label(features)
 
-        row = {k: features[k] for k in DEFAULT_FEATURE_KEYS}
-        row["overall_readiness"] = target_label
+        row: Dict[str, Any] = {**{k: features[k] for k in DEFAULT_FEATURE_KEYS}, "overall_readiness": target_label}
         rows.append(row)
 
     df = pd.DataFrame(rows)
 
     # Reorder columns explicitly: 14 features + overall_readiness
     column_order = list(DEFAULT_FEATURE_KEYS) + ["overall_readiness"]
-    df = df[column_order]
-
-    return df
+    return pd.DataFrame(df[column_order])
 
 
 def generate_synthetic_overall_dataset(num_samples: int = 500, random_seed: int = 42) -> pd.DataFrame:

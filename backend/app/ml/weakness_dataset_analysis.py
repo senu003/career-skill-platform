@@ -89,7 +89,7 @@ def detect_target_leakage(
             for r in dataset:
                 v = r.get(feat)
                 t = r.get(target_key)
-                if not _is_missing(v) and t is not None:
+                if v is not None and not _is_missing(v) and t is not None:
                     feat_vals.append(float(v))
                     valid_targets.append(int(t))
 
@@ -141,11 +141,11 @@ def analyze_weakness_dataset(
     Returns:
         dict: Complete dataset quality & leakage report.
     """
-    # 1. Convert DataFrame to list of dicts safely without mutating input
+    records: List[Dict[str, Any]]
     if isinstance(dataset, pd.DataFrame):
-        records = dataset.to_dict(orient="records")
+        records = [{str(k): v for k, v in r.items()} for r in dataset.to_dict(orient="records")]
     elif isinstance(dataset, list):
-        records = [r.copy() for r in dataset]
+        records = [dict(r) for r in dataset]
     else:
         records = []
 
@@ -288,10 +288,12 @@ def print_weakness_dataset_report(
     """
     Formats the dataset analysis report into a clean readable string report.
     """
-    if isinstance(report_or_dataset, dict) and "row_count" in report_or_dataset:
+    if isinstance(report_or_dataset, (list, pd.DataFrame)):
+        report = analyze_weakness_dataset(report_or_dataset)
+    elif isinstance(report_or_dataset, dict) and "row_count" in report_or_dataset:
         report = report_or_dataset
     else:
-        report = analyze_weakness_dataset(report_or_dataset)
+        report = analyze_weakness_dataset([])
 
     lines = [
         "============================================================",

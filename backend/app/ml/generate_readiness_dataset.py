@@ -158,12 +158,11 @@ def generate_model2_dataset(num_samples: int = 600, random_seed: int = 42) -> pd
         feats = extract_model2_features(analysis)
         target = compute_composite_verdict_target(feats)
 
-        row = {k: feats[k] for k in MODEL2_FEATURES}
-        row["target"] = target
+        row: Dict[str, Any] = {**{k: feats[k] for k in MODEL2_FEATURES}, "target": target}
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    return df[MODEL2_FEATURES + ["target"]]
+    return pd.DataFrame(df[MODEL2_FEATURES + ["target"]])
 
 
 def main():

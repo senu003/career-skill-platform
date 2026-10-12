@@ -22,9 +22,9 @@ export default function ResultsPage() {
   const queryAttemptId = searchParams.get('attempt_id') || searchParams.get('attemptId');
   const targetAttemptId = attemptId || queryAttemptId;
   const rawSkill = skill ? decodeURIComponent(skill) : '';
-  const normalizedSkill = rawSkill || resultData?.skill || '';
 
   const [resultData, setResultData] = useState(null);
+  const normalizedSkill = rawSkill || resultData?.skill || '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 

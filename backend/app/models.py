@@ -1,3 +1,4 @@
+from typing import Any
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean,
     DateTime, Numeric, ForeignKey, CheckConstraint, UniqueConstraint, text
@@ -11,11 +12,11 @@ from .database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)
-    email = Column(String(255), unique=True, nullable=False)
-    password_hash = Column(Text, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    id: Any = Column(Integer, primary_key=True)
+    name: Any = Column(String(100), nullable=False)
+    email: Any = Column(String(255), unique=True, nullable=False)
+    password_hash: Any = Column(Text, nullable=False)
+    created_at: Any = Column(DateTime, server_default=func.now())
 
 
 class CV(Base):
@@ -196,14 +197,14 @@ class QuestionOption(Base):
 class AssessmentAttempt(Base):
     __tablename__ = "assessment_attempts"
 
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=True)
-    skill = Column(String(100), nullable=False)
-    required_level = Column(String(20), nullable=False)
-    cv_level = Column(String(20), nullable=True)
-    assessed_level = Column(String(20), nullable=True)
-    started_at = Column(DateTime, nullable=False, server_default=func.now())
-    completed_at = Column(DateTime, nullable=True)
+    id: Any = Column(Integer, primary_key=True)
+    user_id: Any = Column(Integer, nullable=True)
+    skill: Any = Column(String(100), nullable=False)
+    required_level: Any = Column(String(20), nullable=False)
+    cv_level: Any = Column(String(20), nullable=True)
+    assessed_level: Any = Column(String(20), nullable=True)
+    started_at: Any = Column(DateTime, nullable=False, server_default=func.now())
+    completed_at: Any = Column(DateTime, nullable=True)
 
     answers = relationship("AssessmentAnswer", back_populates="attempt", cascade="all, delete-orphan")
 

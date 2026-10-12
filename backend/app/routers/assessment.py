@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, List, cast
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -10,10 +10,11 @@ from app.schemas.assessment import (
     SubmitAnswerRequest,
     SubmitAnswerResponse,
     AttemptStatusResponse,
-    CompleteAssessmentResponse
+    CompleteAssessmentResponse,
+    AssessmentHistoryObservation
 )
 from app.schemas.skill_analysis import AssessmentResultSchema
-from app.services import assessment_service, skill_analysis_service
+from app.services import assessment_service, skill_analysis_service, longitudinal_service
 from app.auth_deps import get_current_user_required, get_current_user, User
 
 router = APIRouter(
@@ -47,7 +48,7 @@ def start_assessment(
         if payload.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to start assessment for this user")
             
-    effective_user_id = current_user.id if current_user else None
+    effective_user_id: Optional[int] = cast(int, current_user.id) if current_user else None
     res = assessment_service.start_assessment(
         db=db,
         skill=payload.skill,
@@ -88,7 +89,7 @@ def get_assessment_result_by_skill(
         if user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this user's result")
             
-    effective_user_id = current_user.id if current_user else None
+    effective_user_id: Optional[int] = cast(int, current_user.id) if current_user else None
     res = skill_analysis_service.get_assessment_result_for_skill(db=db, skill=skill, user_id=effective_user_id)
     if not res:
         raise HTTPException(
@@ -117,6 +118,20 @@ def get_assessment_result_by_skill(
     res["recommendation"] = rec_info["recommendation"]
     res["recommendation_reason"] = rec_info["reason"]
     
+    return res
+
+
+@router.get("/history/me", response_model=Dict[str, List[AssessmentHistoryObservation]])
+def get_my_candidate_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user_required)):
+    res = longitudinal_service.get_candidate_history(db=db, user_id=cast(int, current_user.id))
+    return res
+
+@router.get("/history/{user_id}", response_model=Dict[str, List[AssessmentHistoryObservation]])
+def get_candidate_history(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user_required)):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this history")
+        
+    res = longitudinal_service.get_candidate_history(db=db, user_id=user_id)
     return res
 
 
@@ -155,7 +170,7 @@ def get_assessment_result_by_attempt(attempt_id: int, db: Session = Depends(get_
     if not assessed_lvl and scores:
         assessed_lvl = skill_analysis_service.generate_ml_prediction(
             matched=True,
-            required_level=attempt.required_level,
+            required_level=cast(str, attempt.required_level),
             importance="required",
             scores=scores
         )
@@ -163,12 +178,12 @@ def get_assessment_result_by_attempt(attempt_id: int, db: Session = Depends(get_
             attempt.assessed_level = assessed_lvl
             db.commit()
 
-    gap = skill_analysis_service.calculate_level_gap(attempt.required_level, assessed_lvl)
+    gap = skill_analysis_service.calculate_level_gap(cast(Optional[str], attempt.required_level), cast(Optional[str], assessed_lvl))
     weakness_info = skill_analysis_service.calculate_weakness(level_gap=gap, total_score=total_score)
     rec_info = skill_analysis_service.generate_recommendation(
-        skill=attempt.skill,
-        required_level=attempt.required_level,
-        assessed_level=assessed_lvl,
+        skill=cast(str, attempt.skill),
+        required_level=cast(Optional[str], attempt.required_level),
+        assessed_level=cast(Optional[str], assessed_lvl),
         level_gap=gap,
         total_score=total_score,
         is_weakness=weakness_info["is_weakness"],
@@ -178,16 +193,16 @@ def get_assessment_result_by_attempt(attempt_id: int, db: Session = Depends(get_
     from app.services.longitudinal_service import predict_skill_improvement_from_history
     improvement_prob = predict_skill_improvement_from_history(
         db=db,
-        user_id=attempt.user_id,
-        skill=attempt.skill,
-        current_attempt_id=attempt.id
+        user_id=cast(Optional[int], attempt.user_id),
+        skill=cast(str, attempt.skill),
+        current_attempt_id=cast(Optional[int], attempt.id)
     )
 
     model1_rec, model1_conf = skill_analysis_service.generate_model1_evaluator_output(
-        required_level=attempt.required_level,
-        assessed_level=assessed_lvl,
+        required_level=cast(str, attempt.required_level),
+        assessed_level=cast(Optional[str], assessed_lvl),
         scores=scores,
-        cv_level=attempt.cv_level
+        cv_level=cast(Optional[str], attempt.cv_level)
     )
 
     return {
@@ -218,28 +233,6 @@ def complete_assessment(attempt_id: int, db: Session = Depends(get_db), current_
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this attempt")
 
     res = assessment_service.complete_assessment(db=db, attempt_id=attempt_id)
-    return res
-
-from app.schemas.assessment import AssessmentHistoryObservation
-from typing import Dict, List
-from app.services import longitudinal_service
-
-@router.get("/history/me", response_model=Dict[str, List[AssessmentHistoryObservation]])
-def get_my_candidate_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user_required)):
-    res = longitudinal_service.get_candidate_history(db=db, user_id=current_user.id)
-    return res
-
-@router.get("/history/{user_id}", response_model=Dict[str, List[AssessmentHistoryObservation]])
-def get_candidate_history(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user_required)):
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="user_id is required to fetch longitudinal history."
-        )
-    if user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this history")
-        
-    res = longitudinal_service.get_candidate_history(db=db, user_id=user_id)
     return res
 
 
