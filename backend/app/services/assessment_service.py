@@ -199,7 +199,13 @@ def evaluate_attempt_state(db: Session, attempt: AssessmentAttempt) -> Tuple[Opt
     return current_active_level, last_passed_level, is_completed, level_stats
 
 
-def start_assessment(db: Session, skill: str, required_level: str, user_id: Optional[int] = None) -> Dict[str, Any]:
+def start_assessment(
+    db: Session,
+    skill: str,
+    required_level: str,
+    user_id: Optional[int] = None,
+    analysis_id: Optional[int] = None,
+) -> Dict[str, Any]:
     canonical_skill = normalize_skill(skill)
     allowed_levels = get_allowed_levels(required_level)
 
@@ -217,6 +223,7 @@ def start_assessment(db: Session, skill: str, required_level: str, user_id: Opti
 
     attempt = AssessmentAttempt(
         user_id=user_id,
+        analysis_id=analysis_id,
         skill=canonical_skill,
         required_level=required_level.lower().strip(),
         cv_level=None,  # Rule: CV level = NULL initially
@@ -232,6 +239,7 @@ def start_assessment(db: Session, skill: str, required_level: str, user_id: Opti
 
     return {
         "attempt_id": attempt.id,
+        "analysis_id": attempt.analysis_id,
         "skill": attempt.skill,
         "required_level": attempt.required_level,
         "cv_level": attempt.cv_level,

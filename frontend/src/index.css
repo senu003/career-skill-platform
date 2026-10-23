@@ -477,6 +477,12 @@ body {
   border: 1px solid #fecaca;
 }
 
+.status-badge-exceeds {
+  background-color: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
 .spinner {
   width: 18px;
   height: 18px;
@@ -1060,4 +1066,76 @@ a:focus-visible {
     padding: 0.25rem 0.65rem;
     font-size: 0.75rem;
   }
+}
+
+/* Skill Grid Matrix Table */
+.skill-matrix-container {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.skill-matrix-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.skill-matrix-table th {
+  background: #f8fafc;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.85rem 1rem;
+  border-bottom: 1.5px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.skill-matrix-table td {
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.skill-matrix-table tr:last-child td {
+  border-bottom: none;
+}
+
+.skill-matrix-table tr:hover td {
+  background-color: #f8fafc;
+}
+
+.level-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.level-pill-advanced,
+.level-pill-intermediate,
+.level-pill-basic,
+.level-pill-any {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.level-pill-missing {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fee2e2;
+  font-style: italic;
 }

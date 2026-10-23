@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Clock, ArrowRight, AlertCircle, RefreshCw, CheckCircle, ArrowLeft } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
@@ -7,6 +7,8 @@ import { isSupportedSkill } from '../utils/supportedSkills';
 
 export default function AssessmentPage() {
   const { skill } = useParams();
+  const [searchParams] = useSearchParams();
+  const analysisId = searchParams.get('analysis_id');
   const navigate = useNavigate();
   const { analysisResult } = useAssessment();
 
@@ -103,6 +105,7 @@ export default function AssessmentPage() {
         body: JSON.stringify({
           skill: normalizedSkill,
           required_level: targetLevel,
+          ...(analysisId ? { analysis_id: Number(analysisId) } : {}),
         }),
       });
 
@@ -140,7 +143,7 @@ export default function AssessmentPage() {
       setNeedsLevelSelection(true);
       setLoading(false);
     }
-  }, [skill]);
+  }, [skill, analysisId]);
 
   // Question Timer Interval (tracks time spent on current question in seconds)
   useEffect(() => {
@@ -198,7 +201,8 @@ export default function AssessmentPage() {
         });
 
         // 4. Navigate to individual result page
-        navigate(`/results/${encodeURIComponent(normalizedSkill)}`);
+        const resultPath = `/results/${encodeURIComponent(normalizedSkill)}`;
+        navigate(analysisId ? `${resultPath}?analysis_id=${encodeURIComponent(analysisId)}` : resultPath);
       } else {
         // 5. Advance to next question
         setCurrentIndex((prev) => prev + 1);

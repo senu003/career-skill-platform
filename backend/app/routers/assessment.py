@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import AssessmentAttempt
+from app.models import AssessmentAttempt, Analysis
 from app.schemas.assessment import (
     StartAssessmentRequest,
     StartAssessmentResponse,
@@ -47,13 +47,24 @@ def start_assessment(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to specify user_id")
         if payload.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to start assessment for this user")
+
+    if payload.analysis_id is not None:
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required to specify analysis_id")
+        analysis = db.query(Analysis).filter(
+            Analysis.id == payload.analysis_id,
+            Analysis.user_id == current_user.id,
+        ).first()
+        if not analysis:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis session not found")
             
     effective_user_id: Optional[int] = cast(int, current_user.id) if current_user else None
     res = assessment_service.start_assessment(
         db=db,
         skill=payload.skill,
         required_level=payload.required_level,
-        user_id=effective_user_id
+        user_id=effective_user_id,
+        analysis_id=payload.analysis_id,
     )
     return res
 
@@ -80,6 +91,7 @@ def submit_answer(payload: SubmitAnswerRequest, db: Session = Depends(get_db), c
 def get_assessment_result_by_skill(
     skill: str,
     user_id: Optional[int] = None,
+    analysis_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
@@ -90,7 +102,12 @@ def get_assessment_result_by_skill(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this user's result")
             
     effective_user_id: Optional[int] = cast(int, current_user.id) if current_user else None
-    res = skill_analysis_service.get_assessment_result_for_skill(db=db, skill=skill, user_id=effective_user_id)
+    res = skill_analysis_service.get_assessment_result_for_skill(
+        db=db,
+        skill=skill,
+        user_id=effective_user_id,
+        analysis_id=analysis_id,
+    )
     if not res:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -234,5 +251,4 @@ def complete_assessment(attempt_id: int, db: Session = Depends(get_db), current_
 
     res = assessment_service.complete_assessment(db=db, attempt_id=attempt_id)
     return res
-
 

@@ -41,11 +41,13 @@ def calculate_level_gap(required_level: Optional[str], assessed_level: Optional[
 def get_assessment_result_for_skill(
     db: Session,
     skill: str,
-    user_id: Optional[int] = None
+    user_id: Optional[int] = None,
+    analysis_id: Optional[int] = None,
+    include_prior: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
-    Retrieves the latest completed assessment result for a given skill (and optional user_id).
-    Returns dict with attempt_id, skill, required_level, assessed_level, and level_gap.
+    Retrieves completed assessment result for a given skill.
+    If include_prior is False, strictly checks attempts for the given analysis_id.
     """
     if not skill or not skill.strip():
         return None
@@ -57,18 +59,19 @@ def get_assessment_result_for_skill(
     if user_id is None:
         return None
 
-    query = (
-        db.query(AssessmentAttempt)
-        .filter(
-            AssessmentAttempt.completed_at.isnot(None),
-            AssessmentAttempt.user_id == user_id
-        )
-    )
+    base_query = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.completed_at.isnot(None),
+        AssessmentAttempt.user_id == user_id,
+    ).order_by(AssessmentAttempt.completed_at.desc(), AssessmentAttempt.id.desc())
 
-    # Order by completed_at desc, id desc to get latest
-    query = query.order_by(AssessmentAttempt.completed_at.desc(), AssessmentAttempt.id.desc())
-
-    attempts = query.all()
+    if analysis_id is not None:
+        session_attempts = base_query.filter(AssessmentAttempt.analysis_id == analysis_id).all()
+        if session_attempts or not include_prior:
+            attempts = session_attempts
+        else:
+            attempts = base_query.all()
+    else:
+        attempts = base_query.all() if include_prior else []
 
     # Find attempt matching skill name or any variant
     matched_attempt = None
@@ -82,14 +85,6 @@ def get_assessment_result_for_skill(
         return None
 
     gap = calculate_level_gap(matched_attempt.required_level, matched_attempt.assessed_level)
-
-    from app.services.longitudinal_service import predict_skill_improvement_from_history
-    improvement_prob = predict_skill_improvement_from_history(
-        db=db,
-        user_id=user_id,
-        skill=matched_attempt.skill,
-        current_attempt_id=matched_attempt.id
-    )
 
     scores = extract_assessment_scores(db, {"attempt_id": matched_attempt.id})
 
@@ -288,7 +283,9 @@ def generate_model1_evaluator_output(
 def combine_cv_and_assessment(
     cv_matching_result: Dict[str, Any],
     db_or_assessments: Optional[Union[Session, Dict[str, Any], List[Dict[str, Any]]]] = None,
-    user_id: Optional[int] = None
+    user_id: Optional[int] = None,
+    analysis_id: Optional[int] = None,
+    include_prior: bool = True,
 ) -> Dict[str, Any]:
     """
     Combines CV matching results with assessment results without altering raw CV matching data.
@@ -296,6 +293,7 @@ def combine_cv_and_assessment(
     cv_matching_result: dict containing matched_skills and missing_skills
     db_or_assessments: SQLAlchemy Session OR pre-built mapping/list of assessment results
     user_id: optional user identifier
+    include_prior: whether to fall back to older assessments from previous sessions
     """
     matched_input = cv_matching_result.get("matched_skills", [])
     missing_input = cv_matching_result.get("missing_skills", [])
@@ -315,7 +313,13 @@ def combine_cv_and_assessment(
             return None
 
         if isinstance(db_or_assessments, Session):
-            return get_assessment_result_for_skill(db_or_assessments, skill_name, user_id=user_id)
+            return get_assessment_result_for_skill(
+                db_or_assessments,
+                skill_name,
+                user_id=user_id,
+                analysis_id=analysis_id,
+                include_prior=include_prior,
+            )
 
         if isinstance(db_or_assessments, dict):
             # Check direct or lowercase lookup
@@ -482,5 +486,3 @@ def combine_cv_and_assessment(
         combined_result["priority_skills"] = None
 
     return combined_result
-
-

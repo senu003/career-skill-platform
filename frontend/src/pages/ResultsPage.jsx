@@ -20,6 +20,7 @@ export default function ResultsPage() {
   const { analysisResult, setAnalysisResult, updateSkillResult } = useAssessment();
 
   const queryAttemptId = searchParams.get('attempt_id') || searchParams.get('attemptId');
+  const analysisId = searchParams.get('analysis_id');
   const targetAttemptId = attemptId || queryAttemptId;
   const rawSkill = skill ? decodeURIComponent(skill) : '';
 
@@ -70,7 +71,9 @@ export default function ResultsPage() {
       if (targetAttemptId) {
         endpoint = `/assessment/${targetAttemptId}/result`;
       } else {
-        endpoint = `/assessment/result/${encodeURIComponent(rawSkill)}`;
+        endpoint = `/assessment/result/${encodeURIComponent(rawSkill)}${
+          analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : ''
+        }`;
       }
 
       const data = await fetchWithAuth(endpoint);
@@ -87,7 +90,7 @@ export default function ResultsPage() {
 
   useEffect(() => {
     fetchResult();
-  }, [skill, targetAttemptId]);
+  }, [skill, targetAttemptId, analysisId]);
 
   // Format Helper: Capitalize level text
   const formatLevel = (lvl) => {

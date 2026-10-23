@@ -160,8 +160,10 @@ export default function HistoryPage() {
 
   // Action Handler: Launch Technical MCQ Assessment for a Specific Skill
   const handleLaunchSkillAssessment = (skillName) => {
+    const analysisId = selectedSessionForRetake?.analysis_id;
     setSelectedSessionForRetake(null);
-    navigate(`/assessment/${encodeURIComponent(skillName)}`);
+    const path = `/assessment/${encodeURIComponent(skillName)}`;
+    navigate(analysisId ? `${path}?analysis_id=${encodeURIComponent(analysisId)}` : path);
   };
 
   // Action Handler: Run New Analysis Intake
@@ -689,10 +691,11 @@ export default function HistoryPage() {
               </h3>
 
               <div className="flex flex-col gap-2">
-                {(selectedSessionForRetake.parsed_skills || []).map((skItem, idx) => {
+                {(selectedSessionForRetake.skills || selectedSessionForRetake.parsed_skills || []).map((skItem, idx) => {
                   const skillName = typeof skItem === 'string' ? skItem : skItem.skill;
                   const supported = isSupportedSkill(skillName);
-                  const reqLvl = typeof skItem === 'object' ? skItem.level : 'Intermediate';
+                  const reqLvl = typeof skItem === 'object' ? (skItem.required_level || skItem.level) : 'Intermediate';
+                  const isAssessed = typeof skItem === 'object' && skItem.assessed_level;
 
                   return (
                     <div
@@ -707,7 +710,7 @@ export default function HistoryPage() {
                         <div className="font-semibold text-sm text-main flex items-center gap-2">
                           <span>{skillName}</span>
                           <span className="text-xs text-muted font-normal" style={{ fontSize: '0.7rem' }}>
-                            (Not assessed yet)
+                            ({isAssessed ? `Assessed: ${isAssessed}` : 'Not assessed yet'})
                           </span>
                         </div>
                         <div className="text-xs text-muted">Required Level: {reqLvl}</div>

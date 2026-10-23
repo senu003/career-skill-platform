@@ -18,6 +18,7 @@ class StartAssessmentRequest(BaseModel):
     skill: str = Field(..., description="Skill name (JavaScript, React, PostgreSQL)")
     required_level: str = Field(..., description="basic, intermediate, or advanced")
     user_id: Optional[int] = Field(None, description="Optional User ID")
+    analysis_id: Optional[int] = Field(None, description="CV/JD analysis session this assessment belongs to")
 
     @field_validator("required_level")
     def validate_level(cls, v: str) -> str:
@@ -29,6 +30,7 @@ class StartAssessmentRequest(BaseModel):
 
 class StartAssessmentResponse(BaseModel):
     attempt_id: int
+    analysis_id: Optional[int] = None
     skill: str
     required_level: str
     cv_level: Optional[str] = None
@@ -73,6 +75,7 @@ class AnswerDetailSchema(BaseModel):
 class AttemptStatusResponse(BaseModel):
     attempt_id: int
     user_id: Optional[int] = None
+    analysis_id: Optional[int] = None
     skill: str
     required_level: str
     cv_level: Optional[str] = None
@@ -114,4 +117,3 @@ class AssessmentHistoryObservation(BaseModel):
     priority: str
     completed_at: Optional[str] = None
     outcome: Optional[LongitudinalOutcome] = None
-

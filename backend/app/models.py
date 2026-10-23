@@ -15,8 +15,47 @@ class User(Base):
     id: Any = Column(Integer, primary_key=True)
     name: Any = Column(String(100), nullable=False)
     email: Any = Column(String(255), unique=True, nullable=False)
-    password_hash: Any = Column(Text, nullable=False)
+    # Nullable to support OAuth-only users who have no password
+    password_hash: Any = Column(Text, nullable=True)
+    avatar_url: Any = Column(Text, nullable=True)
+    # OAuth fields: provider = "google" | None
+    oauth_provider: Any = Column(String(50), nullable=True)
+    oauth_id: Any = Column(String(255), nullable=True)
+    is_active: Any = Column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
     created_at: Any = Column(DateTime, server_default=func.now())
+    updated_at: Any = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")
+    audit_logs = relationship("SecurityAuditLog", back_populates="user", cascade="all, delete-orphan")
+
+
+class PasswordResetToken(Base):
+    """Stores one-time password reset tokens for email/password users."""
+    __tablename__ = "password_reset_tokens"
+
+    id: Any = Column(Integer, primary_key=True)
+    user_id: Any = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Any = Column(String(255), unique=True, nullable=False)  # SHA-256 of the raw token
+    expires_at: Any = Column(DateTime, nullable=False)
+    used: Any = Column(Boolean, nullable=False, default=False, server_default=text("FALSE"))
+    created_at: Any = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="reset_tokens")
+
+
+class SecurityAuditLog(Base):
+    """Immutable security event log for authentication events."""
+    __tablename__ = "security_audit_logs"
+
+    id: Any = Column(Integer, primary_key=True)
+    user_id: Any = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    event_type: Any = Column(String(50), nullable=False)  # login_success, login_failed, logout, password_reset, oauth_login
+    ip_address: Any = Column(String(45), nullable=True)   # IPv4 or IPv6
+    user_agent: Any = Column(Text, nullable=True)
+    details: Any = Column(Text, nullable=True)             # JSON string for extra context
+    created_at: Any = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="audit_logs")
 
 
 class CV(Base):
@@ -199,6 +238,9 @@ class AssessmentAttempt(Base):
 
     id: Any = Column(Integer, primary_key=True)
     user_id: Any = Column(Integer, nullable=True)
+    # Links this attempt to the CV vs JD analysis session it belongs to.
+    # Nullable so old attempts (before this column existed) remain valid.
+    analysis_id: Any = Column(Integer, ForeignKey("analyses.id", ondelete="SET NULL"), nullable=True)
     skill: Any = Column(String(100), nullable=False)
     required_level: Any = Column(String(20), nullable=False)
     cv_level: Any = Column(String(20), nullable=True)

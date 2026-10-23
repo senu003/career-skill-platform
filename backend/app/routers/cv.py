@@ -168,7 +168,7 @@ def get_past_analysis_sessions(
                 "matched_skills": matched_skills,
                 "missing_skills": missing_skills,
                 "score_data": score_data
-            }, db, current_user.id)
+            }, db, current_user.id, a.id)
 
         skills_list = combined.get("skills", [])
         total_skills_count = len(skills_list) if skills_list else len(parsed_skills)
@@ -198,6 +198,7 @@ def get_past_analysis_sessions(
             "company": job.company if job else "",
             "requirements": job.description if job else "",
             "parsed_skills": parsed_skills,
+            "skills": skills_list,
             "cv_filename": cv_obj.file_name if cv_obj else "Uploaded Resume",
             "overall_score": score_val,
             "total_skills_count": total_skills_count,
@@ -279,7 +280,12 @@ def get_analysis_session_detail(
         "score_data": score_data
     }
 
-    result = combine_cv_and_assessment(cv_matching_result, db_or_assessments=db, user_id=current_user.id)
+    result = combine_cv_and_assessment(
+        cv_matching_result,
+        db_or_assessments=db,
+        user_id=current_user.id,
+        analysis_id=analysis_record.id,
+    )
     result["job_title"] = job_record.title if job_record else "Job Position"
     result["company"] = job_record.company if job_record else ""
     result["analysis_id"] = analysis_record.id
@@ -329,6 +335,7 @@ async def analyze_cv(
     company: Optional[str] = Form(None),
     user_id: Optional[int] = Form(None),
     user_id_query: Optional[int] = Query(None, alias="user_id"),
+    include_prior_assessments: bool = Form(True),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
@@ -433,11 +440,17 @@ async def analyze_cv(
         db.commit()
         db.refresh(job_record)
 
+        if cv_record is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to associate the analysis with a saved CV record.",
+            )
+
         overall_val = score_data.get("score", 0) if score_data else 0
         analysis_record = Analysis(
             user_id=effective_user_id,
             job_id=job_record.id,
-            cv_id=cv_record.id if cv_record else 1,
+            cv_id=cv_record.id if cv_record else None,
             overall_score=overall_val,
             raw_analysis_data=json.dumps(evaluated_skills)
         )
@@ -455,9 +468,13 @@ async def analyze_cv(
     }
 
     # 7. Combine CV matching with completed assessment results
-    return combine_cv_and_assessment(cv_matching_result, db_or_assessments=db, user_id=effective_user_id)
-
-@router.get("/debug")
-def debug_env():
-    import os
-    return {"mock": os.environ.get("GEMINI_MOCK"), "model": os.environ.get("GROQ_MODEL")}
+    result = combine_cv_and_assessment(
+        cv_matching_result,
+        db_or_assessments=db,
+        user_id=effective_user_id,
+        analysis_id=analysis_record.id if user_exists else None,
+        include_prior=include_prior_assessments,
+    )
+    if user_exists:
+        result["analysis_id"] = analysis_record.id
+    return result
