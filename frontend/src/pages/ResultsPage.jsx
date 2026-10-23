@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, ArrowRight, RefreshCw, ArrowLeft, Award, Target, TrendingUp, Sparkles, AlertTriangle, Calendar, RotateCcw } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, RotateCcw, RefreshCw } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
@@ -145,34 +145,6 @@ export default function ResultsPage() {
     return `${percent}%`;
   };
 
-  // Helper for recommendation badge color styling
-  const getRecommendationBadgeClass = (rec) => {
-    const cleanRec = (rec || '').toLowerCase().trim();
-    if (cleanRec === 'mastered') {
-      return {
-        badgeStyle: { backgroundColor: 'var(--success-bg)', color: 'var(--success-color)', border: '1px solid #a7f3d0' },
-        icon: <CheckCircle2 size={20} className="text-emerald-500" />
-      };
-    }
-    if (cleanRec === 'speed practice') {
-      return {
-        badgeStyle: { backgroundColor: 'var(--primary-light)', color: 'var(--primary-700)', border: '1px solid var(--primary-200)' },
-        icon: <TrendingUp size={20} style={{ color: 'var(--primary-600)' }} />
-      };
-    }
-    if (cleanRec === 'upgrade needed') {
-      return {
-        badgeStyle: { backgroundColor: 'var(--warning-bg)', color: '#b45309', border: '1px solid #fde68a' },
-        icon: <AlertTriangle size={20} style={{ color: '#d97706' }} />
-      };
-    }
-    // Re-learn Basics or fallback
-    return {
-      badgeStyle: { backgroundColor: 'var(--danger-bg)', color: 'var(--danger-color)', border: '1px solid #fecaca' },
-      icon: <AlertCircle size={20} style={{ color: 'var(--danger-color)' }} />
-    };
-  };
-
   // 1. Loading State
   if (loading) {
     return (
@@ -205,12 +177,12 @@ export default function ResultsPage() {
               : 'An error occurred while fetching your assessment result. Please try again.'}
           </p>
           <div className="flex justify-center gap-3">
-            <button onClick={() => navigate('/dashboard')} className="btn btn-outline">
+            <button onClick={() => navigate(analysisId ? `/dashboard?analysis_id=${encodeURIComponent(analysisId)}` : '/dashboard')} className="btn btn-outline">
               <ArrowLeft size={16} />
-              <span>Back to Dashboard</span>
+              <span>Back to Skill Grid</span>
             </button>
             {isNotFound ? (
-              <button onClick={() => navigate(`/assessment/${encodeURIComponent(normalizedSkill)}`)} className="btn btn-primary">
+              <button onClick={() => navigate(`/assessment/${encodeURIComponent(normalizedSkill)}${analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : ''}`)} className="btn btn-primary">
                 <span>Take Assessment</span>
                 <ArrowRight size={16} />
               </button>
@@ -229,7 +201,7 @@ export default function ResultsPage() {
   // Recommendation label resolution (Model 1 output)
   const recommendationLabel = resultData.skill_recommendation || resultData.recommendation || 'Assessment Completed';
   
-  // Explanation resolution: prefer static mapping for the four known Model 1 recommendations, or backend recommendation_reason if present
+  // Explanation resolution
   const explanationText =
     RECOMMENDATION_EXPLANATIONS[recommendationLabel] ||
     ((resultData.recommendation_reason && resultData.recommendation_reason !== 'NONE' && resultData.recommendation_reason.trim())
@@ -237,17 +209,19 @@ export default function ResultsPage() {
       : 'Assessment completed successfully.');
 
   const confidenceDisplay = formatConfidence(resultData.recommendation_confidence);
-  const badgeConfig = getRecommendationBadgeClass(recommendationLabel);
+  const isMastered = (recommendationLabel || '').toLowerCase().trim() === 'mastered';
 
   return (
-    <div className="assessment-container fade-in">
-      {/* 1. PAGE HEADER */}
+    <div className="assessment-container fade-in" style={{ maxWidth: '720px', margin: '0 auto' }}>
+      {/* 1. Header */}
       <div className="page-header text-center mb-6">
         <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
-          <span className="badge badge-purple">Skill Assessment Result</span>
+          <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}>
+            Skill Verification
+          </span>
           {targetAttemptId && (
-            <span className="badge" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-700)', border: '1px solid var(--primary-200)' }}>
-              Historical Record (Attempt #{targetAttemptId})
+            <span className="badge" style={{ backgroundColor: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0' }}>
+              Attempt #{targetAttemptId}
             </span>
           )}
         </div>
@@ -255,18 +229,19 @@ export default function ResultsPage() {
         <p className="text-muted text-sm mt-1">
           {targetAttemptId && resultData.completed_at
             ? `Completed on ${new Date(resultData.completed_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-            : 'Detailed evaluation score and recommendation breakdown'}
+            : 'Technical assessment score and evaluation summary'}
         </p>
       </div>
 
-      {/* 2. MAIN RESULT CARD */}
-      <div className="card">
-        {/* Recommendation Banner / Status */}
+      {/* 2. Main Scorecard */}
+      <div className="card" style={{ padding: '2rem' }}>
+        {/* Outcome Status Banner */}
         <div
           style={{
-            ...badgeConfig.badgeStyle,
-            padding: '1.25rem 1.5rem',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
             borderRadius: 'var(--radius-sm)',
+            padding: '1.25rem 1.5rem',
             marginBottom: '1.5rem',
             display: 'flex',
             alignItems: 'center',
@@ -276,12 +251,25 @@ export default function ResultsPage() {
           }}
         >
           <div className="flex items-center gap-3">
-            {badgeConfig.icon}
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                backgroundColor: isMastered ? '#dcfce7' : '#fef3c7',
+                color: isMastered ? '#166534' : '#92400e',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isMastered ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+            </div>
             <div>
-              <div className="text-xs uppercase tracking-wider font-semibold opacity-90">
-                Evaluation Recommendation
+              <div className="text-xs uppercase tracking-wider font-semibold text-muted">
+                Evaluation Outcome
               </div>
-              <div className="font-bold text-xl mt-0.5" style={{ lineHeight: 1.2 }}>
+              <div className="font-bold text-lg text-main" style={{ lineHeight: 1.2 }}>
                 {recommendationLabel}
               </div>
             </div>
@@ -290,217 +278,128 @@ export default function ResultsPage() {
           {confidenceDisplay && (
             <div
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.65)',
+                fontSize: '0.8rem',
+                color: '#64748b',
+                backgroundColor: '#ffffff',
                 padding: '0.35rem 0.75rem',
                 borderRadius: '9999px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                boxShadow: 'var(--shadow-sm)'
+                border: '1px solid #e2e8f0',
+                fontWeight: 500,
               }}
             >
-              Recommendation confidence: <strong>{confidenceDisplay}</strong>
+              Confidence: <strong style={{ color: '#1e293b' }}>{confidenceDisplay}</strong>
             </div>
           )}
         </div>
 
-        {/* Level & Score Grid */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {/* Required Level */}
+        {/* 3 Metrics: Target Level | Assessed Level | Score */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
           <div
             style={{
-              padding: '1.25rem 1rem',
-              backgroundColor: 'var(--primary-50)',
-              border: '1px solid var(--primary-200)',
+              padding: '1rem',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
               borderRadius: 'var(--radius-sm)',
               textAlign: 'center',
             }}
           >
-            <div className="flex items-center justify-center gap-1.5 text-xs text-muted font-medium mb-1">
-              <Target size={14} style={{ color: 'var(--primary-600)' }} />
-              <span>Required Level</span>
-            </div>
+            <div className="text-xs text-muted font-medium mb-1">Target Level</div>
             <div className="font-bold text-lg text-main">
               {formatLevel(resultData.required_level)}
             </div>
           </div>
 
-          {/* Assessed Level */}
           <div
             style={{
-              padding: '1.25rem 1rem',
-              backgroundColor: 'var(--primary-50)',
-              border: '1px solid var(--primary-200)',
+              padding: '1rem',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
               borderRadius: 'var(--radius-sm)',
               textAlign: 'center',
             }}
           >
-            <div className="flex items-center justify-center gap-1.5 text-xs text-muted font-medium mb-1">
-              <Award size={14} style={{ color: 'var(--primary-600)' }} />
-              <span>Assessed Level</span>
-            </div>
+            <div className="text-xs text-muted font-medium mb-1">Assessed Level</div>
             <div className="font-bold text-lg text-main">
               {formatLevel(resultData.assessed_level)}
             </div>
           </div>
 
-          {/* Assessment Score */}
           <div
             style={{
-              padding: '1.25rem 1rem',
-              backgroundColor: 'var(--primary-50)',
-              border: '1px solid var(--primary-200)',
+              padding: '1rem',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
               borderRadius: 'var(--radius-sm)',
               textAlign: 'center',
             }}
           >
-            <div className="flex items-center justify-center gap-1.5 text-xs text-muted font-medium mb-1">
-              <Sparkles size={14} style={{ color: 'var(--primary-600)' }} />
-              <span>Assessment Score</span>
-            </div>
+            <div className="text-xs text-muted font-medium mb-1">Score</div>
             <div className="font-bold text-lg text-main">
               {formatScore(resultData.total_score)}
             </div>
           </div>
         </div>
 
-        {/* Explanation Section */}
+        {/* Feedback / Explanation */}
         <div
           style={{
-            padding: '1.25rem',
+            padding: '1rem 1.25rem',
             backgroundColor: '#ffffff',
-            border: '1px solid var(--border-color)',
+            border: '1px solid #e2e8f0',
             borderRadius: 'var(--radius-sm)',
-            marginBottom: '1.5rem',
+            marginBottom: '1.75rem',
           }}
         >
           <div className="text-xs uppercase tracking-wider font-semibold text-muted mb-1">
-            Explanation
+            Feedback & Insight
           </div>
-          <p className="text-sm font-medium text-main" style={{ lineHeight: 1.5 }}>
+          <p className="text-sm text-body" style={{ margin: 0, lineHeight: 1.5 }}>
             {explanationText}
           </p>
         </div>
 
-        {/* Next Identified Skill Callout Banner */}
-        {nextSkill ? (
-          <div
-            style={{
-              padding: '1.25rem 1.5rem',
-              backgroundColor: 'var(--primary-50)',
-              border: '1.5px solid var(--primary-300)',
-              borderRadius: 'var(--radius-sm)',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '1rem',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>Up Next</span>
-                <span className="font-bold text-main text-base">
-                  Next Identified Skill: <strong>{nextSkill.skill}</strong>
-                </span>
-              </div>
-              <p className="text-xs text-muted" style={{ margin: 0 }}>
-                {nextSkill.is_weakness || !nextSkill.matched
-                  ? `Identified as a priority skill gap. Complete the ${nextSkill.skill} technical assessment next to build your candidate profile.`
-                  : `Continue taking remaining technical MCQ assessments to finish evaluating your job match compatibility.`}
-              </p>
-            </div>
-            <button
-              onClick={() => navigate(`/assessment/${encodeURIComponent(nextSkill.skill)}`)}
-              className="btn btn-primary"
-              style={{ padding: '0.6rem 1.25rem', fontSize: '0.875rem' }}
-            >
-              <span>Start {nextSkill.skill} Assessment</span>
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{
-              padding: '1rem 1.25rem',
-              backgroundColor: 'var(--success-bg)',
-              border: '1px solid #a7f3d0',
-              borderRadius: 'var(--radius-sm)',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '1rem',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-emerald-600" />
-              <span className="text-xs font-semibold text-emerald-800">
-                All technical skill assessments completed! Proceed to view your final recommendation summary.
-              </span>
-            </div>
-            <button
-              onClick={() => navigate('/recommendation')}
-              className="btn btn-primary"
-              style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
-            >
-              <span>View Recommendation</span>
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        )}
-
-        {/* Next Action Footer */}
+        {/* Action Bar: Back to Grid, Retake, and Single Next Skill Button */}
         <div
-          className="flex justify-between items-center pt-4 gap-2 flex-wrap"
-          style={{ borderTop: '1px solid var(--border-color)' }}
+          className="flex justify-between items-center pt-4 gap-3 flex-wrap"
+          style={{ borderTop: '1px solid #e2e8f0' }}
         >
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate('/history')}
+              onClick={() => navigate(analysisId ? `/dashboard?analysis_id=${encodeURIComponent(analysisId)}` : '/dashboard')}
               className="btn btn-outline text-xs flex items-center gap-1.5"
-              style={{ padding: '0.55rem 0.95rem' }}
             >
-              <ArrowLeft size={16} />
-              <span>History & Profile</span>
+              <ArrowLeft size={15} />
+              <span>Back to Skill Grid</span>
             </button>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(`/assessment/${encodeURIComponent(resultData.skill || rawSkill)}${analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : ''}`)}
               className="btn btn-outline text-xs flex items-center gap-1.5"
-              style={{ padding: '0.55rem 0.95rem' }}
-            >
-              <span>Dashboard</span>
-            </button>
-          </div>
-
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={() => navigate(`/assessment/${encodeURIComponent(resultData.skill || rawSkill)}`)}
-              className="btn btn-outline text-xs flex items-center gap-1.5"
-              style={{ padding: '0.55rem 0.95rem', borderColor: 'var(--primary-300)', color: 'var(--primary-700)', backgroundColor: 'var(--primary-50)' }}
+              style={{ color: 'var(--text-muted)' }}
+              title="Retake assessment for this skill"
             >
               <RotateCcw size={14} />
-              <span>Re-do Assessment</span>
+              <span>Retake</span>
             </button>
+          </div>
 
+          <div>
             {nextSkill ? (
               <button
-                onClick={() => navigate(`/assessment/${encodeURIComponent(nextSkill.skill)}`)}
+                onClick={() => navigate(`/assessment/${encodeURIComponent(nextSkill.skill)}${analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : ''}`)}
                 className="btn btn-primary"
-                style={{ padding: '0.6rem 1.25rem' }}
+                style={{ padding: '0.6rem 1.25rem', fontSize: '0.875rem' }}
               >
-                <span>Next Assessment ({nextSkill.skill})</span>
-                <ArrowRight size={16} />
+                <span>Next: Verify {nextSkill.skill}</span>
+                <ArrowRight size={15} />
               </button>
             ) : (
               <button
                 onClick={() => navigate('/recommendation')}
                 className="btn btn-primary"
-                style={{ padding: '0.6rem 1.25rem' }}
+                style={{ padding: '0.6rem 1.25rem', fontSize: '0.875rem' }}
               >
-                <span>View Recommendation</span>
-                <ArrowRight size={16} />
+                <span>View Career Recommendation</span>
+                <ArrowRight size={15} />
               </button>
             )}
           </div>
