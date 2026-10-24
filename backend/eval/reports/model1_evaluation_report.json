@@ -1,0 +1,278 @@
+{
+  "evaluation_timestamp": "2026-10-24T18:24:28.339052+00:00",
+  "model_type": "model1",
+  "model_path": "E:\\career-skill-platform\\backend\\models\\model1_skill_evaluator.joblib",
+  "model_sha256": "bd731396f4161b5ea2263328f75c0cb3e185a2c74080a66f2b05bfc718a5693b",
+  "model_classes": [
+    "Mastered",
+    "Re-learn Basics",
+    "Speed Practice",
+    "Upgrade Needed"
+  ],
+  "pipeline_steps": [
+    "('scaler', StandardScaler())",
+    "('classifier', RandomForestClassifier(class_weight='balanced', max_depth=8, random_state=42))"
+  ],
+  "benchmark_metadata": {
+    "benchmark_version": "1.0.0",
+    "model_type": "model1",
+    "description": "Standardized offline holdout benchmark for Model 1: Skill Evaluator",
+    "sample_count": 500,
+    "random_seed": 202610,
+    "features": [
+      "jd_required_level",
+      "cv_parsed_level",
+      "basic_score",
+      "intermediate_score",
+      "advanced_score",
+      "assessment_score",
+      "avg_time_per_question",
+      "relative_time",
+      "attempt_count",
+      "previous_best_score",
+      "score_gap",
+      "speed_accuracy"
+    ],
+    "classes": [
+      "Mastered",
+      "Re-learn Basics",
+      "Speed Practice",
+      "Upgrade Needed"
+    ],
+    "class_distribution": {
+      "Mastered": 125,
+      "Upgrade Needed": 125,
+      "Speed Practice": 125,
+      "Re-learn Basics": 125
+    },
+    "sha256": "7ef417ddfb12c8f222a4ab10288d2156ceb06a0fac6afddda043e239ce32c801",
+    "created_at": "2026-10-24T18:06:09.477279+00:00",
+    "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+  },
+  "model_metrics": {
+    "accuracy": 0.992,
+    "balanced_accuracy": 0.992,
+    "macro_precision": 0.992,
+    "macro_recall": 0.992,
+    "macro_f1": 0.992,
+    "roc_auc": 0.9983,
+    "confusion_matrix": {
+      "labels": [
+        "Mastered",
+        "Re-learn Basics",
+        "Speed Practice",
+        "Upgrade Needed"
+      ],
+      "matrix": [
+        [
+          124,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          125,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          125,
+          0
+        ],
+        [
+          1,
+          2,
+          0,
+          122
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Mastered": {
+        "precision": 0.992,
+        "recall": 0.992,
+        "f1": 0.992,
+        "support": 125
+      },
+      "Re-learn Basics": {
+        "precision": 0.9843,
+        "recall": 1.0,
+        "f1": 0.9921,
+        "support": 125
+      },
+      "Speed Practice": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 125
+      },
+      "Upgrade Needed": {
+        "precision": 0.9919,
+        "recall": 0.976,
+        "f1": 0.9839,
+        "support": 125
+      }
+    },
+    "calibration": {
+      "macro_brier_score": 0.0039,
+      "per_class_brier_scores": {
+        "Mastered": 0.0053,
+        "Re-learn Basics": 0.0027,
+        "Speed Practice": 0.0001,
+        "Upgrade Needed": 0.0075
+      }
+    }
+  },
+  "dummy_baseline_metrics": {
+    "accuracy": 0.25,
+    "balanced_accuracy": 0.25,
+    "macro_precision": 0.0625,
+    "macro_recall": 0.25,
+    "macro_f1": 0.1,
+    "roc_auc": 0.5,
+    "confusion_matrix": {
+      "labels": [
+        "Mastered",
+        "Re-learn Basics",
+        "Speed Practice",
+        "Upgrade Needed"
+      ],
+      "matrix": [
+        [
+          125,
+          0,
+          0,
+          0
+        ],
+        [
+          125,
+          0,
+          0,
+          0
+        ],
+        [
+          125,
+          0,
+          0,
+          0
+        ],
+        [
+          125,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Mastered": {
+        "precision": 0.25,
+        "recall": 1.0,
+        "f1": 0.4,
+        "support": 125
+      },
+      "Re-learn Basics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 125
+      },
+      "Speed Practice": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 125
+      },
+      "Upgrade Needed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 125
+      }
+    },
+    "calibration": {
+      "macro_brier_score": 0.375,
+      "per_class_brier_scores": {
+        "Mastered": 0.75,
+        "Re-learn Basics": 0.25,
+        "Speed Practice": 0.25,
+        "Upgrade Needed": 0.25
+      }
+    },
+    "strategy": "most_frequent"
+  },
+  "rule_baseline_metrics": {
+    "accuracy": 0.938,
+    "balanced_accuracy": 0.938,
+    "macro_precision": 0.949,
+    "macro_recall": 0.938,
+    "macro_f1": 0.9379,
+    "roc_auc": null,
+    "confusion_matrix": {
+      "labels": [
+        "Mastered",
+        "Re-learn Basics",
+        "Speed Practice",
+        "Upgrade Needed"
+      ],
+      "matrix": [
+        [
+          125,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          125,
+          0,
+          0
+        ],
+        [
+          26,
+          0,
+          99,
+          0
+        ],
+        [
+          3,
+          2,
+          0,
+          120
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Mastered": {
+        "precision": 0.8117,
+        "recall": 1.0,
+        "f1": 0.8961,
+        "support": 125
+      },
+      "Re-learn Basics": {
+        "precision": 0.9843,
+        "recall": 1.0,
+        "f1": 0.9921,
+        "support": 125
+      },
+      "Speed Practice": {
+        "precision": 1.0,
+        "recall": 0.792,
+        "f1": 0.8839,
+        "support": 125
+      },
+      "Upgrade Needed": {
+        "precision": 1.0,
+        "recall": 0.96,
+        "f1": 0.9796,
+        "support": 125
+      }
+    },
+    "calibration": {}
+  },
+  "disagreement_analysis": {},
+  "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+}

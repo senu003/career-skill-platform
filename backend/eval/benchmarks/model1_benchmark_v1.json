@@ -1,0 +1,36 @@
+{
+  "benchmark_version": "1.0.0",
+  "model_type": "model1",
+  "description": "Standardized offline holdout benchmark for Model 1: Skill Evaluator",
+  "sample_count": 500,
+  "random_seed": 202610,
+  "features": [
+    "jd_required_level",
+    "cv_parsed_level",
+    "basic_score",
+    "intermediate_score",
+    "advanced_score",
+    "assessment_score",
+    "avg_time_per_question",
+    "relative_time",
+    "attempt_count",
+    "previous_best_score",
+    "score_gap",
+    "speed_accuracy"
+  ],
+  "classes": [
+    "Mastered",
+    "Re-learn Basics",
+    "Speed Practice",
+    "Upgrade Needed"
+  ],
+  "class_distribution": {
+    "Mastered": 125,
+    "Upgrade Needed": 125,
+    "Speed Practice": 125,
+    "Re-learn Basics": 125
+  },
+  "sha256": "7ef417ddfb12c8f222a4ab10288d2156ceb06a0fac6afddda043e239ce32c801",
+  "created_at": "2026-10-24T18:06:09.477279+00:00",
+  "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+}

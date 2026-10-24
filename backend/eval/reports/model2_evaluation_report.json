@@ -1,0 +1,254 @@
+{
+  "evaluation_timestamp": "2026-10-24T18:24:28.649646+00:00",
+  "model_type": "model2",
+  "model_path": "E:\\career-skill-platform\\backend\\models\\model2_final_recommendation.joblib",
+  "model_sha256": "e615fa17e4fa088421864d0440f53ec036e6ee89d1cba592ef80c8c14bd5ba2e",
+  "model_classes": [
+    "Interview Ready",
+    "Major Upskill Required",
+    "Short-Term Prep"
+  ],
+  "pipeline_steps": [
+    "('scaler', StandardScaler())",
+    "('classifier', RandomForestClassifier(class_weight='balanced', max_depth=6, random_state=42))"
+  ],
+  "benchmark_metadata": {
+    "benchmark_version": "1.0.0",
+    "model_type": "model2",
+    "description": "Standardized offline holdout benchmark for Model 2: Final Recommendation Engine",
+    "sample_count": 300,
+    "random_seed": 202620,
+    "features": [
+      "total_required_skills",
+      "missing_skills_count",
+      "average_skill_gap",
+      "overall_assessment_accuracy",
+      "upgrade_needed_count",
+      "mastered_count",
+      "speed_practice_count",
+      "relearn_basics_count",
+      "assessed_skills_count",
+      "assessment_completion_rate"
+    ],
+    "classes": [
+      "Interview Ready",
+      "Major Upskill Required",
+      "Short-Term Prep"
+    ],
+    "class_distribution": {
+      "Interview Ready": 105,
+      "Major Upskill Required": 102,
+      "Short-Term Prep": 93
+    },
+    "sha256": "192ead2630e52f41f2c7726394cdce8404c0eecb68bcbfec36f18b52243323ab",
+    "created_at": "2026-10-24T18:06:09.864589+00:00",
+    "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+  },
+  "model_metrics": {
+    "accuracy": 0.8933,
+    "balanced_accuracy": 0.8939,
+    "macro_precision": 0.8989,
+    "macro_recall": 0.8939,
+    "macro_f1": 0.8936,
+    "roc_auc": 0.9702,
+    "confusion_matrix": {
+      "labels": [
+        "Interview Ready",
+        "Major Upskill Required",
+        "Short-Term Prep"
+      ],
+      "matrix": [
+        [
+          94,
+          0,
+          11
+        ],
+        [
+          0,
+          89,
+          13
+        ],
+        [
+          5,
+          3,
+          85
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Interview Ready": {
+        "precision": 0.9495,
+        "recall": 0.8952,
+        "f1": 0.9216,
+        "support": 105
+      },
+      "Major Upskill Required": {
+        "precision": 0.9674,
+        "recall": 0.8725,
+        "f1": 0.9175,
+        "support": 102
+      },
+      "Short-Term Prep": {
+        "precision": 0.7798,
+        "recall": 0.914,
+        "f1": 0.8416,
+        "support": 93
+      }
+    },
+    "calibration": {
+      "macro_brier_score": 0.0555,
+      "per_class_brier_scores": {
+        "Interview Ready": 0.0435,
+        "Major Upskill Required": 0.0411,
+        "Short-Term Prep": 0.082
+      }
+    }
+  },
+  "dummy_baseline_metrics": {
+    "accuracy": 0.35,
+    "balanced_accuracy": 0.3333,
+    "macro_precision": 0.1167,
+    "macro_recall": 0.3333,
+    "macro_f1": 0.1728,
+    "roc_auc": 0.5,
+    "confusion_matrix": {
+      "labels": [
+        "Interview Ready",
+        "Major Upskill Required",
+        "Short-Term Prep"
+      ],
+      "matrix": [
+        [
+          105,
+          0,
+          0
+        ],
+        [
+          102,
+          0,
+          0
+        ],
+        [
+          93,
+          0,
+          0
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Interview Ready": {
+        "precision": 0.35,
+        "recall": 1.0,
+        "f1": 0.5185,
+        "support": 105
+      },
+      "Major Upskill Required": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 102
+      },
+      "Short-Term Prep": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 93
+      }
+    },
+    "calibration": {
+      "macro_brier_score": 0.4333,
+      "per_class_brier_scores": {
+        "Interview Ready": 0.65,
+        "Major Upskill Required": 0.34,
+        "Short-Term Prep": 0.31
+      }
+    },
+    "strategy": "most_frequent"
+  },
+  "rule_baseline_metrics": {
+    "accuracy": 0.8133,
+    "balanced_accuracy": 0.8129,
+    "macro_precision": 0.8263,
+    "macro_recall": 0.8129,
+    "macro_f1": 0.8139,
+    "roc_auc": null,
+    "confusion_matrix": {
+      "labels": [
+        "Interview Ready",
+        "Major Upskill Required",
+        "Short-Term Prep"
+      ],
+      "matrix": [
+        [
+          81,
+          0,
+          24
+        ],
+        [
+          0,
+          90,
+          12
+        ],
+        [
+          2,
+          18,
+          73
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Interview Ready": {
+        "precision": 0.9759,
+        "recall": 0.7714,
+        "f1": 0.8617,
+        "support": 105
+      },
+      "Major Upskill Required": {
+        "precision": 0.8333,
+        "recall": 0.8824,
+        "f1": 0.8571,
+        "support": 102
+      },
+      "Short-Term Prep": {
+        "precision": 0.6697,
+        "recall": 0.7849,
+        "f1": 0.7228,
+        "support": 93
+      }
+    },
+    "calibration": {}
+  },
+  "disagreement_analysis": {
+    "disagreement_count": 59,
+    "disagreement_rate": 0.1967,
+    "total_samples": 300,
+    "disagreement_matrix": {
+      "rows_are": "Deterministic Rules (Production Verdict)",
+      "cols_are": "Random Forest ML (Challenger)",
+      "labels": [
+        "Interview Ready",
+        "Major Upskill Required",
+        "Short-Term Prep"
+      ],
+      "matrix": [
+        [
+          78,
+          0,
+          5
+        ],
+        [
+          1,
+          83,
+          24
+        ],
+        [
+          20,
+          9,
+          80
+        ]
+      ]
+    },
+    "production_verdict_note": "CRITICAL: In production, deterministic rules govern the final verdict. The Random Forest operates as a logged challenger. Disagreements do NOT alter production verdicts unless the ML model is explicitly verified and promoted."
+  },
+  "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+}

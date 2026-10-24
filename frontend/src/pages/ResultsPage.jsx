@@ -79,7 +79,7 @@ export default function ResultsPage() {
       const data = await fetchWithAuth(endpoint);
       setResultData(data);
       if (updateSkillResult && data?.skill) {
-        updateSkillResult(data.skill, data);
+        await updateSkillResult(data.skill, data);
       }
     } catch (err) {
       setError(err.message || 'Failed to load assessment result.');

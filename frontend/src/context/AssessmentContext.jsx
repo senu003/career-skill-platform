@@ -62,14 +62,16 @@ export function AssessmentProvider({ children }) {
   };
 
   const updateSkillResult = (skillName, resultData) => {
-    if (!analysisResult || !analysisResult.skills) return;
+    if (!analysisResult || !analysisResult.skills) return Promise.resolve(null);
 
     const updatedSkills = analysisResult.skills.map((s) => {
       if (s.skill.toLowerCase() === skillName.toLowerCase()) {
-        const hasPassed = resultData.assessed_level !== null && resultData.assessed_level !== undefined;
         return {
           ...s,
-          matched: hasPassed ? true : s.matched,
+          // Strictly preserve CV evidence
+          matched: s.matched,
+          cv_match_status: s.cv_match_status,
+          cv_level: s.cv_level,
           assessed_level: resultData.assessed_level !== undefined ? resultData.assessed_level : s.assessed_level,
           level_gap: resultData.level_gap !== undefined ? resultData.level_gap : s.level_gap,
           total_score: resultData.total_score !== undefined ? resultData.total_score : s.total_score,
@@ -89,15 +91,28 @@ export function AssessmentProvider({ children }) {
     const newResult = {
       ...analysisResult,
       skills: updatedSkills,
-      matched_skills: updatedSkills.filter((s) => s.matched),
-      missing_skills: updatedSkills.filter((s) => !s.matched),
+      matched_skills: (analysisResult.matched_skills || []).map((ms) => {
+        if (ms.skill.toLowerCase() === skillName.toLowerCase()) {
+          const up = updatedSkills.find((u) => u.skill.toLowerCase() === skillName.toLowerCase());
+          return up || ms;
+        }
+        return ms;
+      }),
+      missing_skills: (analysisResult.missing_skills || []).map((ms) => {
+        if (ms.skill.toLowerCase() === skillName.toLowerCase()) {
+          const up = updatedSkills.find((u) => u.skill.toLowerCase() === skillName.toLowerCase());
+          return up || ms;
+        }
+        return ms;
+      }),
     };
     setAnalysisResult(newResult);
 
-    // If session ID exists, trigger backend sync in background
+    // If session ID exists, trigger authoritative backend sync
     if (analysisResult?.analysis_id) {
-      refreshAnalysis(analysisResult.analysis_id).catch(() => {});
+      return refreshAnalysis(analysisResult.analysis_id);
     }
+    return Promise.resolve(newResult);
   };
 
   // Auto-restore latest session from API if no active analysis in memory/localStorage

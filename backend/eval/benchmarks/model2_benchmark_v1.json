@@ -1,0 +1,32 @@
+{
+  "benchmark_version": "1.0.0",
+  "model_type": "model2",
+  "description": "Standardized offline holdout benchmark for Model 2: Final Recommendation Engine",
+  "sample_count": 300,
+  "random_seed": 202620,
+  "features": [
+    "total_required_skills",
+    "missing_skills_count",
+    "average_skill_gap",
+    "overall_assessment_accuracy",
+    "upgrade_needed_count",
+    "mastered_count",
+    "speed_practice_count",
+    "relearn_basics_count",
+    "assessed_skills_count",
+    "assessment_completion_rate"
+  ],
+  "classes": [
+    "Interview Ready",
+    "Major Upskill Required",
+    "Short-Term Prep"
+  ],
+  "class_distribution": {
+    "Interview Ready": 105,
+    "Major Upskill Required": 102,
+    "Short-Term Prep": 93
+  },
+  "sha256": "192ead2630e52f41f2c7726394cdce8404c0eecb68bcbfec36f18b52243323ab",
+  "created_at": "2026-10-24T18:06:09.864589+00:00",
+  "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+}

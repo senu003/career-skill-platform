@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Upload, FileText, CheckCircle2, AlertCircle, AlertTriangle,
   ArrowRight, RefreshCw, Briefcase, ChevronDown, ChevronUp,
@@ -11,11 +11,15 @@ import { isSupportedSkill } from '../utils/supportedSkills';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { analysisResult, setAnalysisResult, clearAnalysis } = useAssessment();
+  const urlAnalysisId = searchParams.get('analysis_id');
+  const activeAnalysisId = urlAnalysisId || analysisResult?.analysis_id;
+
   const assessmentPath = (skillName) => {
     const path = `/assessment/${encodeURIComponent(skillName)}`;
-    return analysisResult?.analysis_id
-      ? `${path}?analysis_id=${encodeURIComponent(analysisResult.analysis_id)}`
+    return activeAnalysisId
+      ? `${path}?analysis_id=${encodeURIComponent(activeAnalysisId)}`
       : path;
   };
 
@@ -85,6 +89,27 @@ export default function DashboardPage() {
       isMounted = false;
     };
   }, []);
+
+  // Sync session from URL if explicit analysis_id is provided
+  useEffect(() => {
+    let isCancelled = false;
+    if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
+      const fetchSession = async () => {
+        try {
+          const res = await fetchWithAuth(`/cv/sessions/${urlAnalysisId}`);
+          if (!isCancelled && res) {
+            setAnalysisResult(res);
+          }
+        } catch (err) {
+          console.warn('Failed to load session from analysis_id param:', err);
+        }
+      };
+      fetchSession();
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [urlAnalysisId, analysisResult?.analysis_id]);
 
   const isSkillAvailable = (skillName) => {
     return isSupportedSkill(skillName, supportedSkillsList);
@@ -343,20 +368,24 @@ export default function DashboardPage() {
     return 0;
   };
 
-  // Status Helper: 4-tier classification with descriptive labels and color classes
+  // Status Helper: 4-tier evidence taxonomy
   const getSkillStatus = (skillItem) => {
+    const isAssessed = skillItem.assessed_level !== null && skillItem.assessed_level !== undefined;
     const tier = getGapTier(skillItem);
-    switch (tier) {
-      case 'totally_missing':
-        return { label: 'Not on CV (Unverified)', className: 'status-badge-missing', tier };
-      case 'level_gap':
-        return { label: 'Level Gap', className: 'status-badge-needs-improvement', tier };
-      case 'exceeds':
-        return { label: 'Exceeds Required', className: 'status-badge-exceeds', tier };
-      case 'meets':
-      default:
-        return { label: 'Meets Requirements', className: 'status-badge-strong', tier };
+    if (isAssessed) {
+      if (tier === 'level_gap' || tier === 'totally_missing') {
+        return { label: 'Verified Gap', className: 'status-badge-needs-improvement', tier };
+      }
+      return { label: 'Verified Mastered', className: 'status-badge-strong', tier };
     }
+    // Unassessed states (strictly separate from verified mastery)
+    if (tier === 'totally_missing') {
+      return { label: 'Not on CV (Unverified)', className: 'status-badge-missing', tier };
+    }
+    if (tier === 'level_gap') {
+      return { label: 'CV Level Gap (Unverified)', className: 'status-badge-needs-improvement', tier };
+    }
+    return { label: 'CV Evidenced (Unverified)', className: 'status-badge-strong', tier };
   };
 
   // One-line explanation under each gap, aware of missing levels

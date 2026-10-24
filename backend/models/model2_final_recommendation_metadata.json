@@ -1,0 +1,146 @@
+{
+  "model_identifier": "model2_final_recommendation.joblib",
+  "model_type": "model2",
+  "artifact_sha256": "e615fa17e4fa088421864d0440f53ec036e6ee89d1cba592ef80c8c14bd5ba2e",
+  "artifact_file_size_bytes": 616858,
+  "pipeline_class": "Pipeline",
+  "pipeline_steps": [
+    "('scaler', StandardScaler())",
+    "('classifier', RandomForestClassifier(class_weight='balanced', max_depth=6, random_state=42))"
+  ],
+  "classifier_class": "RandomForestClassifier",
+  "hyperparameters": {
+    "n_estimators": 100,
+    "max_depth": 6,
+    "random_state": 42,
+    "class_weight": "balanced",
+    "min_samples_split": 2,
+    "min_samples_leaf": 1
+  },
+  "input_feature_count": 10,
+  "input_features": [
+    "total_required_skills",
+    "missing_skills_count",
+    "average_skill_gap",
+    "overall_assessment_accuracy",
+    "upgrade_needed_count",
+    "mastered_count",
+    "speed_practice_count",
+    "relearn_basics_count",
+    "assessed_skills_count",
+    "assessment_completion_rate"
+  ],
+  "target_class_count": 3,
+  "target_classes": [
+    "Interview Ready",
+    "Major Upskill Required",
+    "Short-Term Prep"
+  ],
+  "evaluation_audit": {
+    "audit_date": "2026-10-24T18:24:28.649646+00:00",
+    "benchmark_version": "1.0.0",
+    "benchmark_sha256": "192ead2630e52f41f2c7726394cdce8404c0eecb68bcbfec36f18b52243323ab",
+    "benchmark_samples": 300,
+    "accuracy": 0.8933,
+    "balanced_accuracy": 0.8939,
+    "macro_precision": 0.8989,
+    "macro_recall": 0.8939,
+    "macro_f1": 0.8936,
+    "macro_roc_auc": 0.9702,
+    "macro_brier_score": 0.0555,
+    "confusion_matrix": {
+      "labels": [
+        "Interview Ready",
+        "Major Upskill Required",
+        "Short-Term Prep"
+      ],
+      "matrix": [
+        [
+          94,
+          0,
+          11
+        ],
+        [
+          0,
+          89,
+          13
+        ],
+        [
+          5,
+          3,
+          85
+        ]
+      ]
+    },
+    "per_class_metrics": {
+      "Interview Ready": {
+        "precision": 0.9495,
+        "recall": 0.8952,
+        "f1": 0.9216,
+        "support": 105
+      },
+      "Major Upskill Required": {
+        "precision": 0.9674,
+        "recall": 0.8725,
+        "f1": 0.9175,
+        "support": 102
+      },
+      "Short-Term Prep": {
+        "precision": 0.7798,
+        "recall": 0.914,
+        "f1": 0.8416,
+        "support": 93
+      }
+    }
+  },
+  "baseline_comparison": {
+    "dummy_macro_f1": 0.1728,
+    "rule_baseline_macro_f1": 0.8139,
+    "f1_lift_over_dummy": 0.7208,
+    "f1_lift_over_rules": 0.0797
+  },
+  "disagreement_with_rules": {
+    "disagreement_count": 59,
+    "disagreement_rate": 0.1967,
+    "total_samples": 300,
+    "disagreement_matrix": {
+      "rows_are": "Deterministic Rules (Production Verdict)",
+      "cols_are": "Random Forest ML (Challenger)",
+      "labels": [
+        "Interview Ready",
+        "Major Upskill Required",
+        "Short-Term Prep"
+      ],
+      "matrix": [
+        [
+          78,
+          0,
+          5
+        ],
+        [
+          1,
+          83,
+          24
+        ],
+        [
+          20,
+          9,
+          80
+        ]
+      ]
+    },
+    "production_verdict_note": "CRITICAL: In production, deterministic rules govern the final verdict. The Random Forest operates as a logged challenger. Disagreements do NOT alter production verdicts unless the ML model is explicitly verified and promoted."
+  },
+  "known_training_details": {
+    "historical_training_timestamp": "UNKNOWN (pre-Phase 3 legacy artifact)",
+    "training_dataset_origin": "Synthetic latent distribution generator (app.ml.generate_weakness_dataset / generate_readiness_dataset)",
+    "training_data_seed": "42 (documented default)",
+    "cv_splits": "5-Fold Stratified K-Fold (documented in training scripts)"
+  },
+  "limitations": [
+    "Trained and evaluated on synthetic data generated via heuristic rules.",
+    "Does not represent human-annotated ground-truth interview performance.",
+    "In Model 2, deterministic rules serve as the authoritative production verdict; ML runs as a logged challenger."
+  ],
+  "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness."
+}

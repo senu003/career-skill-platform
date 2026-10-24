@@ -25,6 +25,12 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
     pref_met = 0
     has_high_priority_required_weakness = False
     
+    requirements_evidenced_cv = 0
+    requirements_verified_assessment = 0
+    confirmed_gaps_count = 0
+    unverified_cv_missing_count = 0
+    critical_unresolved_count = 0
+
     for s in skills:
         importance = (s.importance or "required").strip().lower()
         is_req = (importance == "required")
@@ -33,6 +39,8 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
             req_total += 1
         elif importance == "preferred":
             pref_total += 1
+
+        is_assessed = (s.assessed_level is not None or s.total_score is not None)
             
         # Determine if requirement is met
         # Requirement is met if assessed and level gap is 0, OR ml predicted level meets requirement
@@ -47,8 +55,20 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
             elif importance == "preferred":
                 pref_met += 1
         else:
-            if s.assessed_level is not None or s.level_gap is not None:
+            if is_assessed or s.level_gap is not None:
                 skills_below_requirement += 1
+
+        # Track verified vs CV evidence
+        if is_assessed:
+            if meets and not s.is_weakness:
+                requirements_verified_assessment += 1
+            if s.is_weakness or (s.level_gap is not None and s.level_gap > 0) or (s.total_score is not None and s.total_score < 0.40):
+                confirmed_gaps_count += 1
+        else:
+            if s.matched and s.cv_match_status != "Missing":
+                requirements_evidenced_cv += 1
+            else:
+                unverified_cv_missing_count += 1
             
         if s.is_weakness:
             weakness_count += 1
@@ -57,6 +77,7 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
             
             if is_req and s.priority == "HIGH":
                 has_high_priority_required_weakness = True
+                critical_unresolved_count += 1
                 
         if s.total_score is not None:
             scored_skills.append((s.skill, s.total_score))
@@ -82,6 +103,7 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
     
     # Readiness Status
     assessed_count = len([s for s in skills if s.assessed_level is not None or s.total_score is not None])
+    assessment_completion_rate = round((assessed_count / total_skills) * 100, 1) if total_skills > 0 else 0.0
     
     if assessed_count == 0:
         readiness_status = "Insufficient Data"
@@ -98,7 +120,13 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
     readiness_reasons = None
     recommendation_confidence = None
     is_preliminary = (assessed_count == 0)
-    verification_status = "Unverified (Preliminary CV Evidence)" if is_preliminary else "Assessment Verified"
+    if is_preliminary:
+        verification_status = "Unverified (Preliminary CV Evidence)"
+    elif assessed_count < total_skills:
+        verification_status = f"Partially Verified ({assessed_count}/{total_skills} Quizzes Completed)"
+    else:
+        verification_status = "Fully Assessment Verified"
+
     try:
         from app.ml.predict_readiness import predict_final_recommendation
         payload_dict = {
@@ -111,7 +139,7 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         recommendation_confidence = m2_res.get("confidence")
         if "is_preliminary" in m2_res:
             is_preliminary = m2_res["is_preliminary"]
-        if "verification_status" in m2_res:
+        if "verification_status" in m2_res and is_preliminary:
             verification_status = m2_res["verification_status"]
     except Exception:
         pass
@@ -145,5 +173,12 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         overall_improvement_probability=overall_improvement_probability,
         is_preliminary=is_preliminary,
         verification_status=verification_status,
+        requirements_evidenced_cv=requirements_evidenced_cv,
+        requirements_verified_assessment=requirements_verified_assessment,
+        confirmed_gaps_count=confirmed_gaps_count,
+        unverified_cv_missing_count=unverified_cv_missing_count,
+        assessed_skills_count=assessed_count,
+        assessment_completion_rate=assessment_completion_rate,
+        critical_unresolved_count=critical_unresolved_count,
         skills=skills
     )

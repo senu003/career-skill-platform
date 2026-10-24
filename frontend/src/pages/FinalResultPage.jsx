@@ -30,6 +30,7 @@ const RECOMMENDATION_EXPLANATIONS = {
   'Speed Practice': 'Core concept knowledge is adequate, but problem-solving speed needs practice.',
   'Re-learn Basics': 'Candidate struggled with fundamental concepts. Structured foundational review required.',
   'Verify Skill': 'Skill was not detected in CV evidence. Assessment recommended to demonstrate proficiency.',
+  'Verify Proficiency': 'Skill detected in CV evidence (unverified). Assessment recommended to confirm technical proficiency.',
 };
 
 const WEAKNESS_REASON_MAP = {
@@ -152,10 +153,25 @@ export default function FinalResultPage() {
   const [loadingAgg, setLoadingAgg] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
 
-  // Auto-restore session from backend if analysisResult is empty
+  // Auto-restore session from backend if urlAnalysisId provided OR if analysisResult is empty
   useEffect(() => {
     let isCancelled = false;
-    if (!analysisResult) {
+    if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
+      const fetchSession = async () => {
+        setLoadingAgg(true);
+        try {
+          const detailRes = await fetchWithAuth(`/cv/sessions/${urlAnalysisId}`);
+          if (!isCancelled && detailRes) {
+            setAnalysisResult(detailRes);
+          }
+        } catch (err) {
+          console.warn('Could not restore session for analysis_id:', err);
+        } finally {
+          if (!isCancelled) setLoadingAgg(false);
+        }
+      };
+      fetchSession();
+    } else if (!analysisResult) {
       const restoreLatestSession = async () => {
         setLoadingAgg(true);
         try {
@@ -182,7 +198,7 @@ export default function FinalResultPage() {
     return () => {
       isCancelled = true;
     };
-  }, [analysisResult, urlAnalysisId, setAnalysisResult]);
+  }, [analysisResult?.analysis_id, urlAnalysisId, setAnalysisResult]);
 
   const skillsList = analysisResult?.skills || [
     ...(analysisResult?.matched_skills || []),
@@ -279,33 +295,56 @@ export default function FinalResultPage() {
     );
   }
 
-  // Skill categorization
+  // 4-state skill categorization
   const assessedSkills = skillsList.filter((s) => s.assessed_level !== null && s.assessed_level !== undefined);
-  const cvVerifiedSkills = skillsList.filter((s) => s.matched && !s.assessed_level && !s.is_weakness);
-  const gapSkills = skillsList.filter((s) => s.is_weakness || !s.matched || (s.level_gap !== null && s.level_gap > 0));
+  const verifiedMasteredSkills = skillsList.filter((s) => {
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    return isAssessed && !s.is_weakness && (s.level_gap === null || s.level_gap === 0);
+  });
+  const confirmedGapSkills = skillsList.filter((s) => {
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    return isAssessed && (s.is_weakness || (s.level_gap !== null && s.level_gap > 0) || (s.total_score !== null && s.total_score < 0.40));
+  });
+  const cvEvidencedSkills = skillsList.filter((s) => {
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    return !isAssessed && s.matched && s.cv_match_status !== 'Missing';
+  });
+  const missingCvSkills = skillsList.filter((s) => {
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    return !isAssessed && (!s.matched || s.cv_match_status === 'Missing');
+  });
 
   // Filter skills list based on active tab
   const filteredSkills = skillsList.filter((s) => {
-    if (activeTab === 'gaps') return s.is_weakness || !s.matched || (s.level_gap !== null && s.level_gap > 0);
-    if (activeTab === 'assessed') return s.assessed_level !== null && s.assessed_level !== undefined;
-    if (activeTab === 'cv_verified') return s.matched && !s.assessed_level;
+    if (activeTab === 'verified') {
+      const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+      return isAssessed && !s.is_weakness && (s.level_gap === null || s.level_gap === 0);
+    }
+    if (activeTab === 'gaps') {
+      const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+      return isAssessed && (s.is_weakness || (s.level_gap !== null && s.level_gap > 0) || (s.total_score !== null && s.total_score < 0.40));
+    }
+    if (activeTab === 'cv_evidenced') {
+      const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+      return !isAssessed && s.matched && s.cv_match_status !== 'Missing';
+    }
+    if (activeTab === 'missing_cv') {
+      const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+      return !isAssessed && (!s.matched || s.cv_match_status === 'Missing');
+    }
     return true;
   });
 
-  // Verdict & overall status resolution
-  const finalVerdict = aggregationData?.final_verdict || analysisResult?.final_verdict || aggregationData?.readiness_status || 'Evaluation Complete';
+  // Authoritative Verdict & Overall Status Resolution
+  const finalVerdict = analysisResult?.readiness_verdict || analysisResult?.final_verdict || aggregationData?.readiness_verdict || aggregationData?.final_verdict || 'Evaluation Complete';
   const overallConfidenceDisplay = formatConfidence(aggregationData?.recommendation_confidence || analysisResult?.recommendation_confidence || 0.85);
-  const isPreliminary = aggregationData?.is_preliminary || analysisResult?.is_preliminary || assessedSkills.length === 0;
+  const isPreliminary = Boolean(analysisResult?.is_preliminary ?? aggregationData?.is_preliminary ?? (assessedSkills.length === 0));
 
   const overallMatchScore = analysisResult?.score_data?.score !== undefined 
     ? `${Math.round(analysisResult.score_data.score)}%` 
     : (aggregationData?.overall_score !== null && aggregationData?.overall_score !== undefined 
         ? `${Math.round(aggregationData.overall_score * 100)}%` 
         : '80%');
-
-  const skillsMetCount = aggregationData 
-    ? aggregationData.skills_meeting_requirement 
-    : skillsList.filter(s => s.matched && !s.is_weakness).length;
 
   const totalSkillsCount = aggregationData?.total_skills || skillsList.length;
 
@@ -460,21 +499,25 @@ export default function FinalResultPage() {
 
           <div className="match-stat-item" style={{ backgroundColor: bannerTheme.badgeBg }}>
             <div className="text-xs" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 600 }}>
-              Job Readiness
+              CV Match
             </div>
             <div className="font-extrabold text-xl mt-0.5">{overallMatchScore}</div>
           </div>
 
           <div className="match-stat-item" style={{ backgroundColor: bannerTheme.badgeBg }}>
             <div className="text-xs" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 600 }}>
-              Requirements Met
+              {isPreliminary ? 'CV Evidenced' : 'Verified Skills'}
             </div>
-            <div className="font-extrabold text-xl mt-0.5">{skillsMetCount} / {totalSkillsCount}</div>
+            <div className="font-extrabold text-xl mt-0.5">
+              {isPreliminary
+                ? `${cvEvidencedSkills.length} / ${totalSkillsCount}`
+                : `${verifiedMasteredSkills.length} / ${totalSkillsCount}`}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 2. AGGREGATED METRICS GRID (Responsive, pristine layout) */}
+      {/* 2. AGGREGATED METRICS GRID (6 Clear, Disjoint Metrics) */}
       <div
         style={{
           display: 'grid',
@@ -486,7 +529,7 @@ export default function FinalResultPage() {
         <div className="card" style={{ padding: '1.25rem 1.5rem', margin: 0, border: '1px solid var(--border-color)' }}>
           <div className="text-xs text-muted font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
             <Layers size={14} style={{ color: 'var(--primary-600)' }} />
-            <span>Total Job Skills</span>
+            <span>Total Requirements</span>
           </div>
           <div className="font-extrabold text-2xl text-main">{totalSkillsCount}</div>
           <div className="text-xs text-muted mt-1">Identified from job description</div>
@@ -494,33 +537,55 @@ export default function FinalResultPage() {
 
         <div className="card" style={{ padding: '1.25rem 1.5rem', margin: 0, border: '1px solid var(--border-color)' }}>
           <div className="text-xs text-muted font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <CheckCircle2 size={14} style={{ color: '#0284c7' }} />
+            <span>CV Evidenced (Unverified)</span>
+          </div>
+          <div className="font-extrabold text-2xl text-main">{cvEvidencedSkills.length}</div>
+          <div className="text-xs text-muted mt-1">Satisfied from CV claims</div>
+        </div>
+
+        <div className="card" style={{ padding: '1.25rem 1.5rem', margin: 0, border: '1px solid var(--border-color)' }}>
+          <div className="text-xs text-muted font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
             <ShieldCheck size={14} style={{ color: '#059669' }} />
-            <span>Assessed via Quiz</span>
+            <span>Verified Mastered</span>
           </div>
-          <div className="font-extrabold text-2xl text-main">{assessedSkills.length}</div>
+          <div className="font-extrabold text-2xl text-main">{verifiedMasteredSkills.length}</div>
           <div className="text-xs text-muted mt-1">
-            {assessedSkills.length === 0 ? 'None completed yet' : `${assessedSkills.length} skill quiz attempted`}
+            {verifiedMasteredSkills.length === 0 ? 'None verified yet' : 'Demonstrated quiz mastery'}
           </div>
         </div>
 
         <div className="card" style={{ padding: '1.25rem 1.5rem', margin: 0, border: '1px solid var(--border-color)' }}>
           <div className="text-xs text-muted font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
-            <CheckCircle2 size={14} style={{ color: '#2563eb' }} />
-            <span>CV Verified Skills</span>
+            <AlertTriangle size={14} style={{ color: '#dc2626' }} />
+            <span>Confirmed Gaps</span>
           </div>
-          <div className="font-extrabold text-2xl text-main">{cvVerifiedSkills.length}</div>
-          <div className="text-xs text-muted mt-1">Satisfied from CV evidence</div>
+          <div className="font-extrabold text-2xl text-main">{confirmedGapSkills.length}</div>
+          <div className="text-xs text-muted mt-1">
+            {confirmedGapSkills.length === 0 ? 'Zero confirmed gaps' : 'Assessment level gap or score < 40%'}
+          </div>
         </div>
 
         <div className="card" style={{ padding: '1.25rem 1.5rem', margin: 0, border: '1px solid var(--border-color)' }}>
           <div className="text-xs text-muted font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
-            <AlertTriangle size={14} style={{ color: '#d97706' }} />
-            <span>Growth Skill Gaps</span>
+            <HelpCircle size={14} style={{ color: '#64748b' }} />
+            <span>Not on CV (Unverified)</span>
           </div>
-          <div className="font-extrabold text-2xl text-main">{gapSkills.length}</div>
-          <div className="text-xs text-muted mt-1">
-            {gapSkills.length === 0 ? 'Zero gaps detected' : 'Require practice or CV update'}
+          <div className="font-extrabold text-2xl text-main">{missingCvSkills.length}</div>
+          <div className="text-xs text-muted mt-1">Take quiz to prove capability</div>
+        </div>
+
+        <div className="card" style={{ padding: '1.25rem 1.5rem', margin: 0, border: '1px solid var(--border-color)' }}>
+          <div className="text-xs text-muted font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <TrendingUp size={14} style={{ color: 'var(--primary-600)' }} />
+            <span>Quiz Completion Rate</span>
           </div>
+          <div className="font-extrabold text-2xl text-main">
+            {aggregationData?.assessment_completion_rate !== undefined
+              ? `${aggregationData.assessment_completion_rate}%`
+              : `${Math.round((assessedSkills.length / Math.max(1, totalSkillsCount)) * 100)}%`}
+          </div>
+          <div className="text-xs text-muted mt-1">{assessedSkills.length} of {totalSkillsCount} quizzes taken</div>
         </div>
       </div>
 
@@ -541,9 +606,10 @@ export default function FinalResultPage() {
           <div className="filter-chips" role="group" aria-label="Filter skill recommendations">
             {[
               { id: 'all', label: 'All Skills', count: skillsList.length },
-              { id: 'gaps', label: 'Gaps Only', count: gapSkills.length },
-              { id: 'assessed', label: 'Assessed', count: assessedSkills.length },
-              { id: 'cv_verified', label: 'CV Verified', count: cvVerifiedSkills.length },
+              { id: 'verified', label: 'Verified Mastered', count: verifiedMasteredSkills.length },
+              { id: 'gaps', label: 'Confirmed Gaps', count: confirmedGapSkills.length },
+              { id: 'cv_evidenced', label: 'CV Evidenced (Unverified)', count: cvEvidencedSkills.length },
+              { id: 'missing_cv', label: 'Not on CV (Unverified)', count: missingCvSkills.length },
             ].map((chip) => (
               <button
                 key={chip.id}
@@ -568,27 +634,28 @@ export default function FinalResultPage() {
             filteredSkills.map((item, idx) => {
               const supported = isSupportedSkill(item.skill);
               const isAssessed = item.assessed_level !== null && item.assessed_level !== undefined;
+              const isVerifiedMastered = isAssessed && !item.is_weakness && (item.level_gap === null || item.level_gap === 0);
+              const isVerifiedGap = isAssessed && (item.is_weakness || (item.level_gap !== null && item.level_gap > 0) || (item.total_score !== null && item.total_score < 0.40));
+              const isCvEvidenced = !isAssessed && item.matched && item.cv_match_status !== 'Missing';
+              const isMissingInCv = !isAssessed && (!item.matched || item.cv_match_status === 'Missing');
+
               const reqLvl = formatLevel(item.required_level || item.level);
               const assessedLvl = formatLevel(item.assessed_level);
               const cvLvlDisplay = item.cv_level && item.cv_level !== 'not_found'
                 ? formatLevel(item.cv_level)
                 : (item.matched ? 'Mentioned in CV' : 'Not in CV');
 
-              // Status badge determination
-              const hasGap = item.is_weakness || !item.matched || (item.level_gap !== null && item.level_gap > 0);
-              const isMissingInCv = !item.matched || item.cv_match_status === 'Missing';
-
-              // Model 1 Recommendation label
+              // Model 1 Recommendation label (strictly avoiding 'Mastered' for unassessed CV matches)
               let recLabel = item.skill_recommendation;
               if (!recLabel) {
-                if (isAssessed) {
-                  recLabel = hasGap ? 'Upgrade Needed' : 'Mastered';
+                if (isVerifiedMastered) {
+                  recLabel = 'Mastered';
+                } else if (isVerifiedGap) {
+                  recLabel = 'Upgrade Needed';
                 } else if (isMissingInCv) {
                   recLabel = 'Verify Skill';
-                } else if (hasGap) {
-                  recLabel = 'Upgrade Needed';
                 } else {
-                  recLabel = 'Mastered';
+                  recLabel = 'Verify Proficiency';
                 }
               }
 
@@ -611,7 +678,7 @@ export default function FinalResultPage() {
                     marginBottom: '1rem',
                     backgroundColor: '#ffffff',
                     border: '1px solid var(--border-color)',
-                    borderLeft: hasGap ? '4px solid #f59e0b' : '4px solid #10b981',
+                    borderLeft: isVerifiedGap ? '4px solid #dc2626' : (isVerifiedMastered ? '4px solid #10b981' : (isMissingInCv ? '4px solid #94a3b8' : '4px solid #0ea5e9')),
                   }}
                 >
                   {/* Top Bar: Skill Name + Tags */}
@@ -631,32 +698,64 @@ export default function FinalResultPage() {
                         {item.importance === 'preferred' ? 'Nice to Have' : 'Required'}
                       </span>
 
-                      {/* Verification Status Pill */}
-                      {isAssessed ? (
+                      {/* 4-State Verification Status Pill */}
+                      {isVerifiedMastered && (
                         <span
                           className="badge"
                           style={{
                             fontSize: '0.72rem',
                             fontWeight: 600,
-                            backgroundColor: hasGap ? '#fffbeb' : '#ecfdf5',
-                            color: hasGap ? '#b45309' : '#059669',
-                            border: hasGap ? '1px solid #fde68a' : '1px solid #a7f3d0',
+                            backgroundColor: '#ecfdf5',
+                            color: '#059669',
+                            border: '1px solid #a7f3d0',
                           }}
                         >
-                          ✓ Quiz Assessed: {assessedLvl}
+                          ✓ Verified Mastered: {assessedLvl}
                         </span>
-                      ) : (
+                      )}
+
+                      {isVerifiedGap && (
                         <span
                           className="badge"
                           style={{
                             fontSize: '0.72rem',
                             fontWeight: 600,
-                            backgroundColor: isMissingInCv ? '#f8fafc' : (hasGap ? '#fffbeb' : '#f1f5f9'),
-                            color: isMissingInCv ? '#64748b' : (hasGap ? '#b45309' : '#475569'),
-                            border: isMissingInCv ? '1px solid #e2e8f0' : (hasGap ? '1px solid #fde68a' : '1px solid #cbd5e1'),
+                            backgroundColor: '#fef2f2',
+                            color: '#dc2626',
+                            border: '1px solid #fecaca',
                           }}
                         >
-                          {isMissingInCv ? 'Not on CV (Unverified)' : (hasGap ? 'CV Level Gap' : 'CV Verified')}
+                          ⚠ Verified Gap: {assessedLvl}
+                        </span>
+                      )}
+
+                      {isCvEvidenced && (
+                        <span
+                          className="badge"
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            backgroundColor: '#f0f9ff',
+                            color: '#0369a1',
+                            border: '1px solid #bae6fd',
+                          }}
+                        >
+                          📄 CV Evidenced — Unverified
+                        </span>
+                      )}
+
+                      {isMissingInCv && (
+                        <span
+                          className="badge"
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            backgroundColor: '#f8fafc',
+                            color: '#64748b',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          ❓ Not on CV — Unverified
                         </span>
                       )}
 

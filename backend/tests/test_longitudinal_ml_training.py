@@ -28,6 +28,12 @@ from sklearn.model_selection import GroupShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 
+@pytest.fixture(autouse=True)
+def check_synthetic_csv():
+    from app.ml.train_longitudinal_ml import SYNTHETIC_CSV_PATH, DATA_CSV_PATH
+    if not os.path.exists(SYNTHETIC_CSV_PATH) and not os.path.exists(DATA_CSV_PATH):
+        pytest.skip("Synthetic longitudinal dataset CSV not present (gitignored)")
+
 
 def test_synthetic_dataset_loading_and_target_separation():
     """Verifies dataset loads, target column exists, and feature matrix excludes target."""

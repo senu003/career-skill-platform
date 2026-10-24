@@ -1,0 +1,1467 @@
+{
+  "experiment_timestamp": "2026-10-24T18:52:58.261884+00:00",
+  "pre_experiment_checks": {
+    "model1_champion_exists": true,
+    "model2_champion_exists": true,
+    "model1_metadata_exists": true,
+    "model2_metadata_exists": true,
+    "model1_benchmark_exists": true,
+    "model2_benchmark_exists": true,
+    "m1_artifact_sha256_verified": "bd731396f4161b5ea2263328f75c0cb3e185a2c74080a66f2b05bfc718a5693b",
+    "m2_artifact_sha256_verified": "e615fa17e4fa088421864d0440f53ec036e6ee89d1cba592ef80c8c14bd5ba2e",
+    "m1_benchmark_sha256_verified": "7ef417ddfb12c8f222a4ab10288d2156ceb06a0fac6afddda043e239ce32c801",
+    "m2_benchmark_sha256_verified": "192ead2630e52f41f2c7726394cdce8404c0eecb68bcbfec36f18b52243323ab",
+    "m1_benchmark_overlap_rows": 0,
+    "m2_benchmark_overlap_rows": 0,
+    "benchmark_isolation_verified": true,
+    "schemas_contract_verified": true,
+    "promotion_criteria_defined": {
+      "macro_f1_lift_required": 0.02,
+      "critical_recall_max_degradation": 0.01,
+      "dummy_baseline_lift_required": 0.0,
+      "safety_checks_required": true,
+      "deterministic_disagreement_limit_pct": 15.0,
+      "schema_invariance_required": true
+    }
+  },
+  "synthetic_notice": "SYNTHETIC BENCHMARK NOTICE: This benchmark dataset is generated from heuristic domain simulation formulas. High performance on this benchmark verifies model consistency, algorithm fit, and schema conformance against the synthetic generation rules, but does NOT represent human-annotated ground truth or proof of real-world candidate job readiness.",
+  "model1": {
+    "champion": {
+      "artifact_path": "E:\\career-skill-platform\\backend\\models\\model1_skill_evaluator.joblib",
+      "artifact_sha256": "bd731396f4161b5ea2263328f75c0cb3e185a2c74080a66f2b05bfc718a5693b",
+      "metrics": {
+        "accuracy": 0.992,
+        "balanced_accuracy": 0.992,
+        "macro_precision": 0.992,
+        "macro_recall": 0.992,
+        "macro_f1": 0.992,
+        "roc_auc": 0.9983,
+        "confusion_matrix": {
+          "labels": [
+            "Mastered",
+            "Re-learn Basics",
+            "Speed Practice",
+            "Upgrade Needed"
+          ],
+          "matrix": [
+            [
+              124,
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              125,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              125,
+              0
+            ],
+            [
+              1,
+              2,
+              0,
+              122
+            ]
+          ]
+        },
+        "per_class_metrics": {
+          "Mastered": {
+            "precision": 0.992,
+            "recall": 0.992,
+            "f1": 0.992,
+            "support": 125
+          },
+          "Re-learn Basics": {
+            "precision": 0.9843,
+            "recall": 1.0,
+            "f1": 0.9921,
+            "support": 125
+          },
+          "Speed Practice": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 125
+          },
+          "Upgrade Needed": {
+            "precision": 0.9919,
+            "recall": 0.976,
+            "f1": 0.9839,
+            "support": 125
+          }
+        },
+        "calibration": {
+          "macro_brier_score": 0.0039,
+          "per_class_brier_scores": {
+            "Mastered": 0.0053,
+            "Re-learn Basics": 0.0027,
+            "Speed Practice": 0.0001,
+            "Upgrade Needed": 0.0075
+          }
+        }
+      }
+    },
+    "dummy_baseline": {
+      "accuracy": 0.25,
+      "balanced_accuracy": 0.25,
+      "macro_precision": 0.0625,
+      "macro_recall": 0.25,
+      "macro_f1": 0.1,
+      "roc_auc": 0.5,
+      "confusion_matrix": {
+        "labels": [
+          "Mastered",
+          "Re-learn Basics",
+          "Speed Practice",
+          "Upgrade Needed"
+        ],
+        "matrix": [
+          [
+            125,
+            0,
+            0,
+            0
+          ],
+          [
+            125,
+            0,
+            0,
+            0
+          ],
+          [
+            125,
+            0,
+            0,
+            0
+          ],
+          [
+            125,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "per_class_metrics": {
+        "Mastered": {
+          "precision": 0.25,
+          "recall": 1.0,
+          "f1": 0.4,
+          "support": 125
+        },
+        "Re-learn Basics": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 125
+        },
+        "Speed Practice": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 125
+        },
+        "Upgrade Needed": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 125
+        }
+      },
+      "calibration": {
+        "macro_brier_score": 0.375,
+        "per_class_brier_scores": {
+          "Mastered": 0.75,
+          "Re-learn Basics": 0.25,
+          "Speed Practice": 0.25,
+          "Upgrade Needed": 0.25
+        }
+      },
+      "strategy": "most_frequent"
+    },
+    "rule_baseline": {
+      "accuracy": 0.938,
+      "balanced_accuracy": 0.938,
+      "macro_precision": 0.949,
+      "macro_recall": 0.938,
+      "macro_f1": 0.9379,
+      "roc_auc": null,
+      "confusion_matrix": {
+        "labels": [
+          "Mastered",
+          "Re-learn Basics",
+          "Speed Practice",
+          "Upgrade Needed"
+        ],
+        "matrix": [
+          [
+            125,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            125,
+            0,
+            0
+          ],
+          [
+            26,
+            0,
+            99,
+            0
+          ],
+          [
+            3,
+            2,
+            0,
+            120
+          ]
+        ]
+      },
+      "per_class_metrics": {
+        "Mastered": {
+          "precision": 0.8117,
+          "recall": 1.0,
+          "f1": 0.8961,
+          "support": 125
+        },
+        "Re-learn Basics": {
+          "precision": 0.9843,
+          "recall": 1.0,
+          "f1": 0.9921,
+          "support": 125
+        },
+        "Speed Practice": {
+          "precision": 1.0,
+          "recall": 0.792,
+          "f1": 0.8839,
+          "support": 125
+        },
+        "Upgrade Needed": {
+          "precision": 1.0,
+          "recall": 0.96,
+          "f1": 0.9796,
+          "support": 125
+        }
+      },
+      "calibration": {}
+    },
+    "challengers": {
+      "model1_rf_v1": {
+        "meta": {
+          "name": "model1_rf_v1",
+          "type": "random_forest",
+          "description": "Random Forest variant 1: regularized shallower depth (max_depth=6, n_estimators=150, min_samples_split=4)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model1_rf_v1.joblib",
+          "artifact_sha256": "45302146cca11a27f40c0886ee30c9cc7a5388b1dada1c884d6618d05170dcb8",
+          "file_size_bytes": 462658,
+          "training_samples": 1000,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.993,
+          "cv_macro_f1_mean": 0.993
+        },
+        "metrics": {
+          "accuracy": 0.992,
+          "balanced_accuracy": 0.992,
+          "macro_precision": 0.992,
+          "macro_recall": 0.992,
+          "macro_f1": 0.992,
+          "roc_auc": 0.9997,
+          "confusion_matrix": {
+            "labels": [
+              "Mastered",
+              "Re-learn Basics",
+              "Speed Practice",
+              "Upgrade Needed"
+            ],
+            "matrix": [
+              [
+                124,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                125,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                125,
+                0
+              ],
+              [
+                1,
+                2,
+                0,
+                122
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Mastered": {
+              "precision": 0.992,
+              "recall": 0.992,
+              "f1": 0.992,
+              "support": 125
+            },
+            "Re-learn Basics": {
+              "precision": 0.9843,
+              "recall": 1.0,
+              "f1": 0.9921,
+              "support": 125
+            },
+            "Speed Practice": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 125
+            },
+            "Upgrade Needed": {
+              "precision": 0.9919,
+              "recall": 0.976,
+              "f1": 0.9839,
+              "support": 125
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0043,
+            "per_class_brier_scores": {
+              "Mastered": 0.0053,
+              "Re-learn Basics": 0.0033,
+              "Speed Practice": 0.0002,
+              "Upgrade Needed": 0.0082
+            }
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model1",
+          "challenger_name": "model1_rf_v1",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": 0.0,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Re-learn Basics",
+              "champion_recall": 1.0,
+              "challenger_recall": 1.0,
+              "degradation": 0.0,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1,
+              "challenger_macro_f1": 0.992,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {},
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: +0.0000 (requires >= +0.0200)"
+          ]
+        }
+      },
+      "model1_rf_v2": {
+        "meta": {
+          "name": "model1_rf_v2",
+          "type": "random_forest",
+          "description": "Random Forest variant 2: deeper ensemble (max_depth=10, n_estimators=200, min_samples_split=2)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model1_rf_v2.joblib",
+          "artifact_sha256": "c437bf02525b4d3e37c8ade5037bcd1b102c2079f2919539709e65382c912ac8",
+          "file_size_bytes": 711938,
+          "training_samples": 1000,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.993,
+          "cv_macro_f1_mean": 0.993
+        },
+        "metrics": {
+          "accuracy": 0.99,
+          "balanced_accuracy": 0.99,
+          "macro_precision": 0.99,
+          "macro_recall": 0.99,
+          "macro_f1": 0.99,
+          "roc_auc": 0.9996,
+          "confusion_matrix": {
+            "labels": [
+              "Mastered",
+              "Re-learn Basics",
+              "Speed Practice",
+              "Upgrade Needed"
+            ],
+            "matrix": [
+              [
+                123,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                125,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                125,
+                0
+              ],
+              [
+                1,
+                2,
+                0,
+                122
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Mastered": {
+              "precision": 0.9919,
+              "recall": 0.984,
+              "f1": 0.988,
+              "support": 125
+            },
+            "Re-learn Basics": {
+              "precision": 0.9843,
+              "recall": 1.0,
+              "f1": 0.9921,
+              "support": 125
+            },
+            "Speed Practice": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 125
+            },
+            "Upgrade Needed": {
+              "precision": 0.9839,
+              "recall": 0.976,
+              "f1": 0.9799,
+              "support": 125
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0042,
+            "per_class_brier_scores": {
+              "Mastered": 0.0053,
+              "Re-learn Basics": 0.0032,
+              "Speed Practice": 0.0003,
+              "Upgrade Needed": 0.0081
+            }
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model1",
+          "challenger_name": "model1_rf_v2",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": -0.002,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Re-learn Basics",
+              "champion_recall": 1.0,
+              "challenger_recall": 1.0,
+              "degradation": 0.0,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1,
+              "challenger_macro_f1": 0.99,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {},
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: -0.0020 (requires >= +0.0200)"
+          ]
+        }
+      },
+      "model1_gb": {
+        "meta": {
+          "name": "model1_gb",
+          "type": "gradient_boosting",
+          "description": "Alternative classifier: Gradient Boosting Classifier (n_estimators=100, max_depth=4, learning_rate=0.1)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model1_gb.joblib",
+          "artifact_sha256": "c55071de97d2891cbf84b359bae3b8958f0edf3d4099b617c246a1f3e310ea9f",
+          "file_size_bytes": 804018,
+          "training_samples": 1000,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.991,
+          "cv_macro_f1_mean": 0.991
+        },
+        "metrics": {
+          "accuracy": 0.99,
+          "balanced_accuracy": 0.99,
+          "macro_precision": 0.99,
+          "macro_recall": 0.99,
+          "macro_f1": 0.99,
+          "roc_auc": 0.9976,
+          "confusion_matrix": {
+            "labels": [
+              "Mastered",
+              "Re-learn Basics",
+              "Speed Practice",
+              "Upgrade Needed"
+            ],
+            "matrix": [
+              [
+                123,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                125,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                125,
+                0
+              ],
+              [
+                1,
+                2,
+                0,
+                122
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Mastered": {
+              "precision": 0.9919,
+              "recall": 0.984,
+              "f1": 0.988,
+              "support": 125
+            },
+            "Re-learn Basics": {
+              "precision": 0.9843,
+              "recall": 1.0,
+              "f1": 0.9921,
+              "support": 125
+            },
+            "Speed Practice": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 125
+            },
+            "Upgrade Needed": {
+              "precision": 0.9839,
+              "recall": 0.976,
+              "f1": 0.9799,
+              "support": 125
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0042,
+            "per_class_brier_scores": {
+              "Mastered": 0.0051,
+              "Re-learn Basics": 0.0037,
+              "Speed Practice": 0.0001,
+              "Upgrade Needed": 0.0078
+            }
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model1",
+          "challenger_name": "model1_gb",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": -0.002,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Re-learn Basics",
+              "champion_recall": 1.0,
+              "challenger_recall": 1.0,
+              "degradation": 0.0,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1,
+              "challenger_macro_f1": 0.99,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {},
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: -0.0020 (requires >= +0.0200)"
+          ]
+        }
+      }
+    },
+    "promotion_recommendation": "NO PROMOTION RECOMMENDED"
+  },
+  "model2": {
+    "champion": {
+      "artifact_path": "E:\\career-skill-platform\\backend\\models\\model2_final_recommendation.joblib",
+      "artifact_sha256": "e615fa17e4fa088421864d0440f53ec036e6ee89d1cba592ef80c8c14bd5ba2e",
+      "metrics": {
+        "accuracy": 0.8933,
+        "balanced_accuracy": 0.8939,
+        "macro_precision": 0.8989,
+        "macro_recall": 0.8939,
+        "macro_f1": 0.8936,
+        "roc_auc": 0.9702,
+        "confusion_matrix": {
+          "labels": [
+            "Interview Ready",
+            "Major Upskill Required",
+            "Short-Term Prep"
+          ],
+          "matrix": [
+            [
+              94,
+              0,
+              11
+            ],
+            [
+              0,
+              89,
+              13
+            ],
+            [
+              5,
+              3,
+              85
+            ]
+          ]
+        },
+        "per_class_metrics": {
+          "Interview Ready": {
+            "precision": 0.9495,
+            "recall": 0.8952,
+            "f1": 0.9216,
+            "support": 105
+          },
+          "Major Upskill Required": {
+            "precision": 0.9674,
+            "recall": 0.8725,
+            "f1": 0.9175,
+            "support": 102
+          },
+          "Short-Term Prep": {
+            "precision": 0.7798,
+            "recall": 0.914,
+            "f1": 0.8416,
+            "support": 93
+          }
+        },
+        "calibration": {
+          "macro_brier_score": 0.0555,
+          "per_class_brier_scores": {
+            "Interview Ready": 0.0435,
+            "Major Upskill Required": 0.0411,
+            "Short-Term Prep": 0.082
+          }
+        }
+      },
+      "rule_disagreement": {
+        "disagreement_count": 59,
+        "disagreement_rate": 0.1967,
+        "disagreement_matrix": {
+          "rows_are": "Deterministic Rules",
+          "cols_are": "Challenger ML",
+          "labels": [
+            "Interview Ready",
+            "Major Upskill Required",
+            "Short-Term Prep"
+          ],
+          "matrix": [
+            [
+              78,
+              0,
+              5
+            ],
+            [
+              1,
+              83,
+              24
+            ],
+            [
+              20,
+              9,
+              80
+            ]
+          ]
+        }
+      }
+    },
+    "dummy_baseline": {
+      "accuracy": 0.35,
+      "balanced_accuracy": 0.3333,
+      "macro_precision": 0.1167,
+      "macro_recall": 0.3333,
+      "macro_f1": 0.1728,
+      "roc_auc": 0.5,
+      "confusion_matrix": {
+        "labels": [
+          "Interview Ready",
+          "Major Upskill Required",
+          "Short-Term Prep"
+        ],
+        "matrix": [
+          [
+            105,
+            0,
+            0
+          ],
+          [
+            102,
+            0,
+            0
+          ],
+          [
+            93,
+            0,
+            0
+          ]
+        ]
+      },
+      "per_class_metrics": {
+        "Interview Ready": {
+          "precision": 0.35,
+          "recall": 1.0,
+          "f1": 0.5185,
+          "support": 105
+        },
+        "Major Upskill Required": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 102
+        },
+        "Short-Term Prep": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 93
+        }
+      },
+      "calibration": {
+        "macro_brier_score": 0.4333,
+        "per_class_brier_scores": {
+          "Interview Ready": 0.65,
+          "Major Upskill Required": 0.34,
+          "Short-Term Prep": 0.31
+        }
+      },
+      "strategy": "most_frequent"
+    },
+    "rule_baseline": {
+      "accuracy": 0.8133,
+      "balanced_accuracy": 0.8129,
+      "macro_precision": 0.8263,
+      "macro_recall": 0.8129,
+      "macro_f1": 0.8139,
+      "roc_auc": null,
+      "confusion_matrix": {
+        "labels": [
+          "Interview Ready",
+          "Major Upskill Required",
+          "Short-Term Prep"
+        ],
+        "matrix": [
+          [
+            81,
+            0,
+            24
+          ],
+          [
+            0,
+            90,
+            12
+          ],
+          [
+            2,
+            18,
+            73
+          ]
+        ]
+      },
+      "per_class_metrics": {
+        "Interview Ready": {
+          "precision": 0.9759,
+          "recall": 0.7714,
+          "f1": 0.8617,
+          "support": 105
+        },
+        "Major Upskill Required": {
+          "precision": 0.8333,
+          "recall": 0.8824,
+          "f1": 0.8571,
+          "support": 102
+        },
+        "Short-Term Prep": {
+          "precision": 0.6697,
+          "recall": 0.7849,
+          "f1": 0.7228,
+          "support": 93
+        }
+      },
+      "calibration": {}
+    },
+    "challengers": {
+      "model2_rf_v1": {
+        "meta": {
+          "name": "model2_rf_v1",
+          "type": "random_forest",
+          "description": "Random Forest variant 1: conservative depth (max_depth=5, n_estimators=150, min_samples_split=4)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model2_rf_v1.joblib",
+          "artifact_sha256": "3a0388a2d4895f4034b075ce39505536a9cffb7560194be73c6ac2c3bbd2a2ba",
+          "file_size_bytes": 656698,
+          "training_samples": 600,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.9133,
+          "cv_macro_f1_mean": 0.9139
+        },
+        "metrics": {
+          "accuracy": 0.8833,
+          "balanced_accuracy": 0.8832,
+          "macro_precision": 0.8875,
+          "macro_recall": 0.8832,
+          "macro_f1": 0.8833,
+          "roc_auc": 0.969,
+          "confusion_matrix": {
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                94,
+                0,
+                11
+              ],
+              [
+                0,
+                89,
+                13
+              ],
+              [
+                8,
+                3,
+                82
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Interview Ready": {
+              "precision": 0.9216,
+              "recall": 0.8952,
+              "f1": 0.9082,
+              "support": 105
+            },
+            "Major Upskill Required": {
+              "precision": 0.9674,
+              "recall": 0.8725,
+              "f1": 0.9175,
+              "support": 102
+            },
+            "Short-Term Prep": {
+              "precision": 0.7736,
+              "recall": 0.8817,
+              "f1": 0.8241,
+              "support": 93
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0574,
+            "per_class_brier_scores": {
+              "Interview Ready": 0.0468,
+              "Major Upskill Required": 0.0402,
+              "Short-Term Prep": 0.0851
+            }
+          }
+        },
+        "rule_disagreement": {
+          "disagreement_count": 60,
+          "disagreement_rate": 0.2,
+          "disagreement_matrix": {
+            "rows_are": "Deterministic Rules",
+            "cols_are": "Challenger ML",
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                79,
+                0,
+                4
+              ],
+              [
+                1,
+                83,
+                24
+              ],
+              [
+                22,
+                9,
+                78
+              ]
+            ]
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model2",
+          "challenger_name": "model2_rf_v1",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": -0.0103,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Major Upskill Required",
+              "champion_recall": 0.8725,
+              "challenger_recall": 0.8725,
+              "degradation": 0.0,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1728,
+              "challenger_macro_f1": 0.8833,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {
+              "challenger_disagreement_rate": 0.2,
+              "champion_disagreement_rate": 0.1967,
+              "approved_limit": 0.15,
+              "passed": false
+            },
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: -0.0103 (requires >= +0.0200)",
+            "Rule disagreement rate 20.00% exceeds approved limit"
+          ]
+        }
+      },
+      "model2_rf_v2": {
+        "meta": {
+          "name": "model2_rf_v2",
+          "type": "random_forest",
+          "description": "Random Forest variant 2: higher capacity ensemble (max_depth=8, n_estimators=200, min_samples_split=2)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model2_rf_v2.joblib",
+          "artifact_sha256": "4d543deec04dcde8ecbc1f6cc6f5af4f50aa9708a31ca209b4a342b4ceb94cc5",
+          "file_size_bytes": 1917370,
+          "training_samples": 600,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.9067,
+          "cv_macro_f1_mean": 0.9072
+        },
+        "metrics": {
+          "accuracy": 0.9,
+          "balanced_accuracy": 0.8999,
+          "macro_precision": 0.9036,
+          "macro_recall": 0.8999,
+          "macro_f1": 0.8997,
+          "roc_auc": 0.968,
+          "confusion_matrix": {
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                97,
+                0,
+                8
+              ],
+              [
+                0,
+                89,
+                13
+              ],
+              [
+                7,
+                2,
+                84
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Interview Ready": {
+              "precision": 0.9327,
+              "recall": 0.9238,
+              "f1": 0.9282,
+              "support": 105
+            },
+            "Major Upskill Required": {
+              "precision": 0.978,
+              "recall": 0.8725,
+              "f1": 0.9223,
+              "support": 102
+            },
+            "Short-Term Prep": {
+              "precision": 0.8,
+              "recall": 0.9032,
+              "f1": 0.8485,
+              "support": 93
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0565,
+            "per_class_brier_scores": {
+              "Interview Ready": 0.0441,
+              "Major Upskill Required": 0.0413,
+              "Short-Term Prep": 0.084
+            }
+          }
+        },
+        "rule_disagreement": {
+          "disagreement_count": 57,
+          "disagreement_rate": 0.19,
+          "disagreement_matrix": {
+            "rows_are": "Deterministic Rules",
+            "cols_are": "Challenger ML",
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                81,
+                0,
+                2
+              ],
+              [
+                1,
+                83,
+                24
+              ],
+              [
+                22,
+                8,
+                79
+              ]
+            ]
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model2",
+          "challenger_name": "model2_rf_v2",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": 0.0061,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Major Upskill Required",
+              "champion_recall": 0.8725,
+              "challenger_recall": 0.8725,
+              "degradation": 0.0,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1728,
+              "challenger_macro_f1": 0.8997,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {
+              "challenger_disagreement_rate": 0.19,
+              "champion_disagreement_rate": 0.1967,
+              "approved_limit": 0.15,
+              "passed": false
+            },
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: +0.0061 (requires >= +0.0200)",
+            "Rule disagreement rate 19.00% exceeds approved limit"
+          ]
+        }
+      },
+      "model2_rf_v3": {
+        "meta": {
+          "name": "model2_rf_v3",
+          "type": "random_forest",
+          "description": "Random Forest variant 3: leaf regularization (max_depth=6, min_samples_leaf=3, n_estimators=100)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model2_rf_v3.joblib",
+          "artifact_sha256": "61d2ae627d90b2a1d6c89bdd65933a0adfea6aef81ad9b57ba5348d275f3710b",
+          "file_size_bytes": 536330,
+          "training_samples": 600,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.9083,
+          "cv_macro_f1_mean": 0.9089
+        },
+        "metrics": {
+          "accuracy": 0.89,
+          "balanced_accuracy": 0.89,
+          "macro_precision": 0.8938,
+          "macro_recall": 0.89,
+          "macro_f1": 0.89,
+          "roc_auc": 0.9692,
+          "confusion_matrix": {
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                94,
+                0,
+                11
+              ],
+              [
+                0,
+                90,
+                12
+              ],
+              [
+                7,
+                3,
+                83
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Interview Ready": {
+              "precision": 0.9307,
+              "recall": 0.8952,
+              "f1": 0.9126,
+              "support": 105
+            },
+            "Major Upskill Required": {
+              "precision": 0.9677,
+              "recall": 0.8824,
+              "f1": 0.9231,
+              "support": 102
+            },
+            "Short-Term Prep": {
+              "precision": 0.783,
+              "recall": 0.8925,
+              "f1": 0.8342,
+              "support": 93
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0574,
+            "per_class_brier_scores": {
+              "Interview Ready": 0.0464,
+              "Major Upskill Required": 0.0407,
+              "Short-Term Prep": 0.0852
+            }
+          }
+        },
+        "rule_disagreement": {
+          "disagreement_count": 62,
+          "disagreement_rate": 0.2067,
+          "disagreement_matrix": {
+            "rows_are": "Deterministic Rules",
+            "cols_are": "Challenger ML",
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                78,
+                0,
+                5
+              ],
+              [
+                1,
+                83,
+                24
+              ],
+              [
+                22,
+                10,
+                77
+              ]
+            ]
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model2",
+          "challenger_name": "model2_rf_v3",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": -0.0036,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Major Upskill Required",
+              "champion_recall": 0.8725,
+              "challenger_recall": 0.8824,
+              "degradation": -0.0099,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1728,
+              "challenger_macro_f1": 0.89,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {
+              "challenger_disagreement_rate": 0.2067,
+              "champion_disagreement_rate": 0.1967,
+              "approved_limit": 0.15,
+              "passed": false
+            },
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: -0.0036 (requires >= +0.0200)",
+            "Rule disagreement rate 20.67% exceeds approved limit"
+          ]
+        }
+      },
+      "model2_gb": {
+        "meta": {
+          "name": "model2_gb",
+          "type": "gradient_boosting",
+          "description": "Alternative classifier: Gradient Boosting Classifier (n_estimators=100, max_depth=4, learning_rate=0.08)",
+          "artifact_path": "E:\\career-skill-platform\\backend\\models\\challengers\\model2_gb.joblib",
+          "artifact_sha256": "dde7bbb1a2402cf0f3c5cec344d47e42ac460326118c289d538f19450ba7389a",
+          "file_size_bytes": 676002,
+          "training_samples": 600,
+          "training_seed": 42,
+          "cv_accuracy_mean": 0.895,
+          "cv_macro_f1_mean": 0.8949
+        },
+        "metrics": {
+          "accuracy": 0.8867,
+          "balanced_accuracy": 0.8851,
+          "macro_precision": 0.8882,
+          "macro_recall": 0.8851,
+          "macro_f1": 0.8854,
+          "roc_auc": 0.9632,
+          "confusion_matrix": {
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                98,
+                0,
+                7
+              ],
+              [
+                0,
+                89,
+                13
+              ],
+              [
+                11,
+                3,
+                79
+              ]
+            ]
+          },
+          "per_class_metrics": {
+            "Interview Ready": {
+              "precision": 0.8991,
+              "recall": 0.9333,
+              "f1": 0.9159,
+              "support": 105
+            },
+            "Major Upskill Required": {
+              "precision": 0.9674,
+              "recall": 0.8725,
+              "f1": 0.9175,
+              "support": 102
+            },
+            "Short-Term Prep": {
+              "precision": 0.798,
+              "recall": 0.8495,
+              "f1": 0.8229,
+              "support": 93
+            }
+          },
+          "calibration": {
+            "macro_brier_score": 0.0664,
+            "per_class_brier_scores": {
+              "Interview Ready": 0.0509,
+              "Major Upskill Required": 0.049,
+              "Short-Term Prep": 0.0993
+            }
+          }
+        },
+        "rule_disagreement": {
+          "disagreement_count": 63,
+          "disagreement_rate": 0.21,
+          "disagreement_matrix": {
+            "rows_are": "Deterministic Rules",
+            "cols_are": "Challenger ML",
+            "labels": [
+              "Interview Ready",
+              "Major Upskill Required",
+              "Short-Term Prep"
+            ],
+            "matrix": [
+              [
+                81,
+                0,
+                2
+              ],
+              [
+                1,
+                83,
+                24
+              ],
+              [
+                27,
+                9,
+                73
+              ]
+            ]
+          }
+        },
+        "safety": {
+          "passed": true,
+          "violation_count": 0,
+          "violations": []
+        },
+        "gate": {
+          "model_type": "model2",
+          "challenger_name": "model2_gb",
+          "recommendation": "NO PROMOTION RECOMMENDED",
+          "gate_passed": false,
+          "criteria": {
+            "macro_f1_lift": {
+              "required": ">= +0.0200",
+              "actual_lift": -0.0082,
+              "passed": false
+            },
+            "critical_class_recall": {
+              "critical_class": "Major Upskill Required",
+              "champion_recall": 0.8725,
+              "challenger_recall": 0.8725,
+              "degradation": 0.0,
+              "allowed_degradation": "<= 0.0100",
+              "passed": true
+            },
+            "dummy_baseline_lift": {
+              "dummy_macro_f1": 0.1728,
+              "challenger_macro_f1": 0.8854,
+              "passed": true
+            },
+            "safety_checks": {
+              "passed": true,
+              "violation_count": 0
+            },
+            "deterministic_rule_disagreement": {
+              "challenger_disagreement_rate": 0.21,
+              "champion_disagreement_rate": 0.1967,
+              "approved_limit": 0.15,
+              "passed": false
+            },
+            "schema_contract_preserved": true
+          },
+          "rejection_reasons": [
+            "Insufficient Macro F1 lift: -0.0082 (requires >= +0.0200)",
+            "Rule disagreement rate 21.00% exceeds approved limit"
+          ]
+        }
+      }
+    },
+    "promotion_recommendation": "NO PROMOTION RECOMMENDED"
+  }
+}

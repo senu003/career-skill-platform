@@ -153,6 +153,17 @@ export default function HistoryPage() {
     }
   };
 
+  // Action Handler: Directly Navigate to Full Report for a Historical Session
+  const handleOpenReport = async (session) => {
+    try {
+      const res = await fetchWithAuth(`/cv/sessions/${session.analysis_id}`);
+      if (res) {
+        setAnalysisResult(res);
+      }
+    } catch (err) {}
+    navigate(`/recommendation?analysis_id=${session.analysis_id}`);
+  };
+
   // Action Handler: Open Retake Assessment Modal for a Session
   const handleOpenRetakeModal = (session) => {
     setSelectedSessionForRetake(session);
@@ -526,7 +537,16 @@ export default function HistoryPage() {
                         <span>{sess.status_badge || 'Analysis Complete'}</span>
                       </span>
 
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap justify-end">
+                        <button
+                          onClick={() => handleOpenReport(sess)}
+                          className="btn btn-primary text-xs"
+                          style={{ padding: '0.5rem 0.85rem' }}
+                        >
+                          <Sparkles size={14} />
+                          <span>Full Report</span>
+                        </button>
+
                         <button
                           onClick={() => handleViewResult(sess)}
                           disabled={loadingSessionDetail}
@@ -534,16 +554,16 @@ export default function HistoryPage() {
                           style={{ padding: '0.5rem 0.85rem' }}
                         >
                           <Eye size={14} />
-                          <span>View Result</span>
+                          <span>Quick View</span>
                         </button>
 
                         <button
                           onClick={() => handleOpenRetakeModal(sess)}
-                          className="btn btn-primary text-xs"
+                          className="btn btn-outline text-xs"
                           style={{ padding: '0.5rem 0.85rem' }}
                         >
                           <RotateCcw size={14} />
-                          <span>Retake Assessment</span>
+                          <span>Retake</span>
                         </button>
                       </div>
                     </div>
@@ -644,13 +664,14 @@ export default function HistoryPage() {
             <div className="flex justify-between items-center border-t pt-3" style={{ borderColor: 'var(--border-color)' }}>
               <button
                 onClick={() => {
+                  const aid = selectedSessionResult.analysis_id;
                   setSelectedSessionResult(null);
-                  navigate('/recommendation');
+                  navigate(`/recommendation?analysis_id=${aid}`);
                 }}
                 className="btn btn-secondary text-xs flex items-center gap-1.5"
               >
                 <Sparkles size={14} />
-                <span>Open Recommendation Page</span>
+                <span>Open Full Report</span>
               </button>
 
               <button onClick={() => setSelectedSessionResult(null)} className="btn btn-primary text-xs">

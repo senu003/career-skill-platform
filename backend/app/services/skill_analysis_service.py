@@ -110,11 +110,30 @@ def get_assessment_result_for_skill(
         current_attempt_id=matched_attempt.id
     )
 
+    # Calculate retake telemetry (attempt_count and previous_best_score)
+    all_skill_attempts = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.user_id == user_id,
+        AssessmentAttempt.completed_at.isnot(None),
+        func.lower(AssessmentAttempt.skill).in_(variants_lower + [skill_clean.lower()])
+    ).order_by(AssessmentAttempt.completed_at.asc(), AssessmentAttempt.id.asc()).all()
+
+    attempt_count = max(1, len(all_skill_attempts))
+    prior_scores = []
+    for att in all_skill_attempts:
+        if att.id != matched_attempt.id:
+            att_scores = extract_assessment_scores(db, {"attempt_id": att.id})
+            if att_scores and att_scores.get("total_score") is not None:
+                prior_scores.append(float(att_scores["total_score"]))
+    
+    previous_best_score = max(prior_scores) if prior_scores else (scores.get("total_score") if scores else None)
+
     model1_rec, model1_conf = generate_model1_evaluator_output(
         required_level=matched_attempt.required_level,
         assessed_level=assessed_lvl,
         scores=scores,
-        cv_level=matched_attempt.cv_level
+        cv_level=matched_attempt.cv_level,
+        attempt_count=attempt_count,
+        previous_best_score=previous_best_score
     )
 
     return {
@@ -123,9 +142,12 @@ def get_assessment_result_for_skill(
         "required_level": matched_attempt.required_level,
         "assessed_level": assessed_lvl,
         "level_gap": gap,
+        "total_score": scores.get("total_score") if scores else None,
         "skill_recommendation": model1_rec,
         "recommendation_confidence": model1_conf,
-        "improvement_probability": improvement_prob
+        "improvement_probability": improvement_prob,
+        "attempt_count": attempt_count,
+        "previous_best_score": previous_best_score
     }
 
 
@@ -140,10 +162,10 @@ def extract_assessment_scores(
     if not assessment_data:
         return None
 
-    if "total_score" in assessment_data:
-        b_s = float(assessment_data.get("basic_score", 0.0))
-        i_s = float(assessment_data.get("intermediate_score", 0.0))
-        a_s = float(assessment_data.get("advanced_score", 0.0))
+    if assessment_data.get("total_score") is not None:
+        b_s = float(assessment_data.get("basic_score") or 0.0)
+        i_s = float(assessment_data.get("intermediate_score") or 0.0)
+        a_s = float(assessment_data.get("advanced_score") or 0.0)
         t_s = float(assessment_data["total_score"])
         return {
             "basic_score": b_s,
@@ -386,12 +408,17 @@ def combine_cv_and_assessment(
             is_weakness = weakness_info["is_weakness"]
             weakness_reason = weakness_info["weakness_reason"]
 
-            model1_rec, model1_conf = generate_model1_evaluator_output(
-                required_level=req_level,
-                assessed_level=assessed_lvl,
-                scores=scores,
-                cv_level=cv_level
-            )
+            model1_rec = assessment_data.get("skill_recommendation") if assessment_data else None
+            model1_conf = assessment_data.get("recommendation_confidence") if assessment_data else None
+            if not model1_rec:
+                model1_rec, model1_conf = generate_model1_evaluator_output(
+                    required_level=req_level,
+                    assessed_level=assessed_lvl,
+                    scores=scores,
+                    cv_level=cv_level,
+                    attempt_count=assessment_data.get("attempt_count", 1) if assessment_data else 1,
+                    previous_best_score=assessment_data.get("previous_best_score") if assessment_data else None
+                )
         else:
             # Unassessed skill: level_gap is strictly None until assessed
             level_gap = None

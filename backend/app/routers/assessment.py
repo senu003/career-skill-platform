@@ -1,6 +1,7 @@
 from typing import Optional, Dict, List, cast
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database import SessionLocal
 from app.models import AssessmentAttempt, Analysis
@@ -215,11 +216,28 @@ def get_assessment_result_by_attempt(attempt_id: int, db: Session = Depends(get_
         current_attempt_id=cast(Optional[int], attempt.id)
     )
 
+    # Calculate retake telemetry (attempt_count and previous_best_score)
+    all_attempts = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.user_id == attempt.user_id,
+        AssessmentAttempt.completed_at.isnot(None),
+        func.lower(AssessmentAttempt.skill) == attempt.skill.strip().lower()
+    ).order_by(AssessmentAttempt.completed_at.asc(), AssessmentAttempt.id.asc()).all()
+    attempt_count = max(1, len(all_attempts))
+    prior_scores = []
+    for att in all_attempts:
+        if att.id != attempt.id:
+            att_scores = skill_analysis_service.extract_assessment_scores(db, {"attempt_id": att.id})
+            if att_scores and att_scores.get("total_score") is not None:
+                prior_scores.append(float(att_scores["total_score"]))
+    previous_best_score = max(prior_scores) if prior_scores else (total_score if total_score is not None else None)
+
     model1_rec, model1_conf = skill_analysis_service.generate_model1_evaluator_output(
         required_level=cast(str, attempt.required_level),
         assessed_level=cast(Optional[str], assessed_lvl),
         scores=scores,
-        cv_level=cast(Optional[str], attempt.cv_level)
+        cv_level=cast(Optional[str], attempt.cv_level),
+        attempt_count=attempt_count,
+        previous_best_score=previous_best_score
     )
 
     return {
