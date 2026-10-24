@@ -69,5 +69,7 @@ class CombinedAnalysisResponseSchema(BaseModel):
     readiness_reasons: Optional[List[str]] = Field(None, description="2-3 plain-language reasons explaining the readiness verdict")
     recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 2 confidence score")
     priority_skills: Optional[List[Dict[str, Any]]] = Field(None, description="Top priority skills requiring candidate attention")
+    is_preliminary: Optional[bool] = Field(None, description="Whether this readiness verdict is preliminary pending technical assessments")
+    verification_status: Optional[str] = Field(None, description="Clear statement on technical verification status")
 
 

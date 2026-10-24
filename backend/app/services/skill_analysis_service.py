@@ -189,10 +189,12 @@ def extract_assessment_scores(
         }
 
         for ans in answers:
-            lvl = ans.question_obj.level.lower() if ans.question_obj and ans.question_obj.level else None
+            q_obj = getattr(ans, "question_obj", None)
+            q_lvl = getattr(q_obj, "level", None) if q_obj else None
+            lvl = str(q_lvl).lower() if q_lvl else None
             if lvl in level_counts:
                 level_counts[lvl]["total"] += 1
-                if ans.is_correct:
+                if bool(getattr(ans, "is_correct", False)):
                     level_counts[lvl]["correct"] += 1
 
         total_ans = sum(c["total"] for c in level_counts.values())
@@ -522,11 +524,15 @@ def combine_cv_and_assessment(
         combined_result["readiness_reasons"] = model2_output.get("readiness_reasons")
         combined_result["recommendation_confidence"] = model2_output.get("confidence")
         combined_result["priority_skills"] = model2_output.get("priority_skills")
+        combined_result["is_preliminary"] = model2_output.get("is_preliminary", True)
+        combined_result["verification_status"] = model2_output.get("verification_status", "Unverified (Preliminary CV Evidence)")
     except Exception:
         combined_result["final_verdict"] = None
         combined_result["readiness_verdict"] = None
         combined_result["readiness_reasons"] = None
         combined_result["recommendation_confidence"] = None
         combined_result["priority_skills"] = None
+        combined_result["is_preliminary"] = True
+        combined_result["verification_status"] = "Unverified (Preliminary CV Evidence)"
 
     return combined_result

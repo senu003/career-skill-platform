@@ -348,7 +348,7 @@ export default function DashboardPage() {
     const tier = getGapTier(skillItem);
     switch (tier) {
       case 'totally_missing':
-        return { label: 'Totally Missing', className: 'status-badge-missing', tier };
+        return { label: 'Not on CV (Unverified)', className: 'status-badge-missing', tier };
       case 'level_gap':
         return { label: 'Level Gap', className: 'status-badge-needs-improvement', tier };
       case 'exceeds':
@@ -367,7 +367,7 @@ export default function DashboardPage() {
     const tier = getGapTier(item);
 
     if (tier === 'totally_missing') {
-      return `${importanceLabel} skill — not found anywhere in your CV`;
+      return `${importanceLabel} skill — not mentioned in CV (unverified proficiency)`;
     }
 
     const cvRaw = String(item.cv_level || '').toLowerCase();
@@ -472,7 +472,7 @@ export default function DashboardPage() {
     return gaps.slice(0, 5).map(s => ({
       skill: s.skill,
       reason: s.cv_match_status === 'Missing' || !s.matched
-        ? ((s.importance || 'required').toLowerCase() === 'preferred' ? 'Preferred skill missing from CV' : 'Required skill missing from CV')
+        ? ((s.importance || 'required').toLowerCase() === 'preferred' ? 'Preferred skill not in CV (Unverified)' : 'Required skill not in CV (Unverified)')
         : (s.cv_match_status === 'Needs Improvement' ? 'Skill needs improvement based on CV evidence' : 'Skill gap identified below requirement'),
       required_level: s.required_level || s.level,
       importance: s.importance || 'required',
@@ -520,6 +520,8 @@ export default function DashboardPage() {
   const meetsCount = skillsList.filter(s => getGapTier(s) === 'meets' || getGapTier(s) === 'exceeds').length;
   const gapCount = skillsList.filter(s => getGapTier(s) === 'level_gap').length;
   const missingCount = skillsList.filter(s => getGapTier(s) === 'totally_missing').length;
+  const assessedCount = skillsList.filter(s => s.assessed_level !== null && s.assessed_level !== undefined).length;
+  const isPreliminary = Boolean(analysisResult?.is_preliminary ?? (assessedCount === 0));
 
   // Header display: never show placeholder like "dfgh at ghj"
   const displayJobTitle = jobTitle && jobTitle.trim() ? jobTitle.trim() : 'Your target job';
@@ -881,12 +883,31 @@ export default function DashboardPage() {
 
               {/* Readiness Verdict */}
               <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '1.5rem' }}>
-                <div className="text-xs uppercase tracking-wider font-semibold text-muted">Candidate Readiness</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs uppercase tracking-wider font-semibold text-muted">Candidate Readiness</div>
+                  {isPreliminary && (
+                    <span
+                      className="badge"
+                      style={{
+                        fontSize: '0.68rem',
+                        padding: '0.15rem 0.5rem',
+                        backgroundColor: '#fef3c7',
+                        color: '#92400e',
+                        border: '1px solid #fde68a',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Preliminary
+                    </span>
+                  )}
+                </div>
                 <div className="font-bold text-lg text-main mt-0.5">
                   {readinessVerdict}
                 </div>
                 <div className="text-xs text-muted mt-0.5">
-                  {gapCount + missingCount === 0 ? 'All required skills verified in CV' : `${gapCount + missingCount} skill gap${gapCount + missingCount > 1 ? 's' : ''} identified`}
+                  {isPreliminary
+                    ? 'Technical proficiency unverified (0 assessments completed)'
+                    : (gapCount + missingCount === 0 ? 'All required skills verified in CV' : `${gapCount + missingCount} skill gap${gapCount + missingCount > 1 ? 's' : ''} identified`)}
                 </div>
               </div>
 
@@ -935,7 +956,7 @@ export default function DashboardPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  ✕ {missingCount} Missing
+                  ✕ {missingCount} Unverified in CV
                 </button>
               </div>
             </div>
@@ -1105,7 +1126,7 @@ export default function DashboardPage() {
                                       whiteSpace: 'nowrap',
                                     }}
                                   >
-                                    Take Assessment →
+                                    {tier === 'totally_missing' ? 'Verify Skill →' : 'Take Assessment →'}
                                   </button>
                                 ) : (
                                   <button
