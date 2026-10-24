@@ -27,4 +27,6 @@ class FinalAssessmentAggregationSchema(BaseModel):
     readiness_reasons: Optional[List[str]] = Field(None, description="2-3 plain-language reasons explaining the readiness verdict")
     recommendation_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model 2 confidence score")
     overall_improvement_probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Aggregated candidate skill improvement probability across skills with valid longitudinal history")
+    is_preliminary: Optional[bool] = Field(False, description="Whether verdict is preliminary based on zero quiz assessments")
+    verification_status: Optional[str] = Field(None, description="Assessment verification status: e.g. Verified or Unverified (Preliminary CV Evidence)")
     skills: List[FinalSkillItemSchema] = Field(..., description="Complete individual skill results")

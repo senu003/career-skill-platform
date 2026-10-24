@@ -143,6 +143,49 @@ class TestModel2Predictor(unittest.TestCase):
         self.assertIn("3 of 5 required skills", pipeline_reasons[0])
         self.assertNotIn("6 required skills", pipeline_reasons[0])
 
+    def test_zero_assessments_candidate_generates_preliminary_verdict(self):
+        """
+        Clarification 1: Candidates with 0 assessments must NOT be automatically classified
+        as unready. Strong CV evidence should yield an appropriate preliminary verdict
+        with explicit indication that technical proficiency has not been verified.
+        """
+        analysis = {
+            "matched_skills": [
+                {"skill": "Python", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match"},
+                {"skill": "SQL", "required_level": "basic", "importance": "required", "matched": True, "cv_match_status": "Match"},
+                {"skill": "FastAPI", "required_level": "basic", "importance": "required", "matched": True, "cv_match_status": "Match"},
+            ],
+            "missing_skills": []
+        }
+        res = predict_final_recommendation(analysis)
+        self.assertEqual(res["final_verdict"], "Interview Ready")
+        self.assertTrue(res["is_preliminary"])
+        self.assertEqual(res["verification_status"], "Unverified (Preliminary CV Evidence)")
+        self.assertGreaterEqual(len(res["readiness_reasons"]), 1)
+        self.assertIn("technical proficiency has not yet been verified", res["readiness_reasons"][0])
+
+    def test_missing_cv_skill_not_treated_as_confirmed_failure(self):
+        """
+        Clarification 2: Skills missing from CV are 'Unverified / Not Mentioned'
+        rather than confirmed failures. They should prompt assessment verification
+        without triggering automatic unready classification.
+        """
+        analysis = {
+            "matched_skills": [
+                {"skill": "Python", "required_level": "intermediate", "importance": "required", "matched": True, "cv_match_status": "Match", "assessed_level": "intermediate", "level_gap": 0, "total_score": 0.90},
+                {"skill": "FastAPI", "required_level": "basic", "importance": "required", "matched": True, "cv_match_status": "Match"},
+            ],
+            "missing_skills": [
+                {"skill": "Docker", "required_level": "basic", "importance": "required", "matched": False, "cv_match_status": "Missing"}
+            ]
+        }
+        res = predict_final_recommendation(analysis)
+        # Missing Docker is unverified, not a hard failure; candidate passed Python and matched FastAPI
+        self.assertIn(res["final_verdict"], ["Interview Ready", "Short-Term Prep"])
+        reasons_text = " ".join(res.get("readiness_reasons", []))
+        self.assertIn("Docker", reasons_text)
+        self.assertIn("not mentioned in CV", reasons_text)
+
 
 if __name__ == "__main__":
     unittest.main()

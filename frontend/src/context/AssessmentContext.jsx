@@ -30,12 +30,46 @@ export function AssessmentProvider({ children }) {
     setAnalysisResult(null);
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const refreshAnalysis = async (targetId = null) => {
+    const idToUse = targetId || analysisResult?.analysis_id;
+    setIsRefreshing(true);
+    try {
+      if (idToUse) {
+        const detailRes = await fetchWithAuth(`/cv/sessions/${idToUse}`);
+        if (detailRes) {
+          setAnalysisResult(detailRes);
+          return detailRes;
+        }
+      } else {
+        const sessRes = await fetchWithAuth('/cv/sessions');
+        if (sessRes?.sessions && sessRes.sessions.length > 0) {
+          const latestSess = sessRes.sessions[0];
+          const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
+          if (detailRes) {
+            setAnalysisResult(detailRes);
+            return detailRes;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not refresh analysis session:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+    return null;
+  };
+
   const updateSkillResult = (skillName, resultData) => {
     if (!analysisResult || !analysisResult.skills) return;
+
     const updatedSkills = analysisResult.skills.map((s) => {
       if (s.skill.toLowerCase() === skillName.toLowerCase()) {
+        const hasPassed = resultData.assessed_level !== null && resultData.assessed_level !== undefined;
         return {
           ...s,
+          matched: hasPassed ? true : s.matched,
           assessed_level: resultData.assessed_level !== undefined ? resultData.assessed_level : s.assessed_level,
           level_gap: resultData.level_gap !== undefined ? resultData.level_gap : s.level_gap,
           total_score: resultData.total_score !== undefined ? resultData.total_score : s.total_score,
@@ -44,6 +78,9 @@ export function AssessmentProvider({ children }) {
           priority: resultData.priority !== undefined ? resultData.priority : s.priority,
           recommendation: resultData.recommendation !== undefined ? resultData.recommendation : s.recommendation,
           recommendation_reason: resultData.recommendation_reason !== undefined ? resultData.recommendation_reason : s.recommendation_reason,
+          skill_recommendation: resultData.skill_recommendation !== undefined ? resultData.skill_recommendation : s.skill_recommendation,
+          recommendation_confidence: resultData.recommendation_confidence !== undefined ? resultData.recommendation_confidence : s.recommendation_confidence,
+          improvement_probability: resultData.improvement_probability !== undefined ? resultData.improvement_probability : s.improvement_probability,
         };
       }
       return s;
@@ -52,8 +89,15 @@ export function AssessmentProvider({ children }) {
     const newResult = {
       ...analysisResult,
       skills: updatedSkills,
+      matched_skills: updatedSkills.filter((s) => s.matched),
+      missing_skills: updatedSkills.filter((s) => !s.matched),
     };
     setAnalysisResult(newResult);
+
+    // If session ID exists, trigger backend sync in background
+    if (analysisResult?.analysis_id) {
+      refreshAnalysis(analysisResult.analysis_id).catch(() => {});
+    }
   };
 
   // Auto-restore latest session from API if no active analysis in memory/localStorage
@@ -91,7 +135,7 @@ export function AssessmentProvider({ children }) {
   }, []);
 
   return (
-    <AssessmentContext.Provider value={{ analysisResult, setAnalysisResult, updateSkillResult, clearAnalysis }}>
+    <AssessmentContext.Provider value={{ analysisResult, setAnalysisResult, updateSkillResult, clearAnalysis, refreshAnalysis, isRefreshing }}>
       {children}
     </AssessmentContext.Provider>
   );

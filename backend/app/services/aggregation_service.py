@@ -23,11 +23,10 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
     req_met = 0
     pref_total = 0
     pref_met = 0
-    
     has_high_priority_required_weakness = False
     
     for s in skills:
-        importance = s.importance.strip().lower()
+        importance = (s.importance or "required").strip().lower()
         is_req = (importance == "required")
         
         if is_req:
@@ -40,10 +39,6 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         meets = False
         if s.level_gap is not None and s.level_gap == 0:
             meets = True
-        elif s.level_gap is None and s.assessed_level is None:
-            # If not assessed, it's not meeting requirement deterministically 
-            # We could use ml_predicted_level, but the prompt says: combining all assessed skills.
-            pass
             
         if meets:
             skills_meeting_requirement += 1
@@ -102,6 +97,8 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
     readiness_verdict = None
     readiness_reasons = None
     recommendation_confidence = None
+    is_preliminary = (assessed_count == 0)
+    verification_status = "Unverified (Preliminary CV Evidence)" if is_preliminary else "Assessment Verified"
     try:
         from app.ml.predict_readiness import predict_final_recommendation
         payload_dict = {
@@ -112,6 +109,10 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         readiness_verdict = m2_res.get("readiness_verdict") or final_verdict
         readiness_reasons = m2_res.get("readiness_reasons")
         recommendation_confidence = m2_res.get("confidence")
+        if "is_preliminary" in m2_res:
+            is_preliminary = m2_res["is_preliminary"]
+        if "verification_status" in m2_res:
+            verification_status = m2_res["verification_status"]
     except Exception:
         pass
 
@@ -142,5 +143,7 @@ def aggregate_final_assessment(skills: List[FinalSkillItemSchema]) -> FinalAsses
         readiness_reasons=readiness_reasons,
         recommendation_confidence=recommendation_confidence,
         overall_improvement_probability=overall_improvement_probability,
+        is_preliminary=is_preliminary,
+        verification_status=verification_status,
         skills=skills
     )

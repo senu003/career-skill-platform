@@ -140,11 +140,19 @@ class Model1SkillEvaluator:
         }
 
     def _rule_based_fallback(self, features: Dict[str, float]) -> tuple[str, float]:
-        """Deterministic fallback if ML pipeline is unavailable or throws an error."""
-        if features.get("score_gap", 0) > 0 or features.get("assessment_score", 0) < 0.60:
-            return "Upgrade Needed", 0.80
+        """Deterministic domain logic for skill evaluator."""
+        score = features.get("assessment_score", 0.0)
+        gap = features.get("score_gap", 0.0)
+        avg_time = features.get("avg_time_per_question", 30.0)
+
+        if score < 0.40:
+            return "Re-learn Basics", 0.90
+        elif gap > 0 or score < 0.65:
+            return "Upgrade Needed", 0.85
+        elif avg_time > 45.0:
+            return "Speed Practice", 0.80
         else:
-            return "Mastered", 0.80
+            return "Mastered", 0.88
 
     def predict_single(self, input_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -177,15 +185,31 @@ class Model1SkillEvaluator:
             except Exception as e:
                 logger.warning(f"Model 1 ML Challenger failed: {e}")
 
+        # Guard against synthetic pipeline anomalies: never allow Mastered for low scores
+        score = features.get("assessment_score", 0.0)
+        gap = features.get("score_gap", 0.0)
+        if score < 0.40:
+            final_rec = "Re-learn Basics"
+            final_conf = 0.92
+        elif (gap > 0 or score < 0.65) and ml_rec == "Mastered":
+            final_rec = "Upgrade Needed"
+            final_conf = 0.85
+        elif ml_rec:
+            final_rec = ml_rec
+            final_conf = ml_conf or rules_conf
+        else:
+            final_rec = rules_rec
+            final_conf = rules_conf
+
         ml_override_attempted = (ml_rec is not None and ml_rec != rules_rec)
         if ml_override_attempted:
-            logger.info(f"Model 1 ML override attempt: predicted '{ml_rec}', rules said '{rules_rec}'.")
+            logger.info(f"Model 1 ML override attempt: predicted '{ml_rec}', rules said '{rules_rec}', final '{final_rec}'.")
 
         return {
-            "recommendation": rules_rec,
+            "recommendation": final_rec,
             "rules_recommendation": rules_rec,
             "ml_recommendation": ml_rec,
-            "confidence": rules_conf,
+            "confidence": final_conf,
             "ml_override_attempted": ml_override_attempted
         }
 

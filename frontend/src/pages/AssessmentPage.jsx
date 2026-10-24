@@ -8,9 +8,9 @@ import { isSupportedSkill } from '../utils/supportedSkills';
 export default function AssessmentPage() {
   const { skill } = useParams();
   const [searchParams] = useSearchParams();
-  const analysisId = searchParams.get('analysis_id');
-  const navigate = useNavigate();
   const { analysisResult } = useAssessment();
+  const analysisId = searchParams.get('analysis_id') || analysisResult?.analysis_id;
+  const navigate = useNavigate();
 
   const normalizedSkill = skill ? decodeURIComponent(skill) : '';
 

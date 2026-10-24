@@ -62,9 +62,20 @@ class Model2FinalRecommendationPredictor:
                 return "Short-Term Prep", 0.80
 
         LEVEL_MAP = {'basic': 1, 'intermediate': 2, 'advanced': 3}
-        failed_count = 0
         required_count = 0
         has_critical_failure = False
+
+        assessed_skills = [
+            s for s in raw_skills
+            if s.get("total_score") is not None or s.get("assessed_level") is not None
+        ]
+        is_zero_assessments = (len(assessed_skills) == 0)
+
+        # Categorize required skills
+        confirmed_quiz_failures = 0
+        cv_evidenced_matches = 0
+        cv_level_gaps = 0
+        unverified_cv_missing = 0
 
         for s in raw_skills:
             imp = str(s.get('importance', '')).lower()
@@ -76,35 +87,59 @@ class Model2FinalRecommendationPredictor:
             score = s.get('total_score')
             assessed_level = s.get('assessed_level')
             matched = s.get('matched', True)
+            cv_status = s.get("cv_match_status")
 
-            failed = False
-            if not matched and score is None:
-                failed = True
-            elif score is not None:
-                if score < 0.40:
-                    failed = True
+            if score is not None or assessed_level is not None:
+                # Assessed via quiz
+                if score is not None and score < 0.40:
+                    confirmed_quiz_failures += 1
+                    if 'critical' in imp:
+                        has_critical_failure = True
                 else:
-                    if LEVEL_MAP.get(str(req_level).lower(), 0) > 0 and LEVEL_MAP.get(str(assessed_level).lower(), 0) > 0:
-                        if LEVEL_MAP.get(str(req_level).lower(), 0) - LEVEL_MAP.get(str(assessed_level).lower(), 0) >= 2:
-                            failed = True
+                    req_num = LEVEL_MAP.get(str(req_level).lower(), 0)
+                    ass_num = LEVEL_MAP.get(str(assessed_level).lower(), 0)
+                    if req_num > 0 and ass_num > 0 and (req_num - ass_num >= 2):
+                        confirmed_quiz_failures += 1
+                        if 'critical' in imp:
+                            has_critical_failure = True
+            else:
+                # Unassessed skill: evaluate CV evidence
+                # Missing from CV is unverified, NOT proof of candidate lacking skill
+                if not matched or cv_status == "Missing":
+                    unverified_cv_missing += 1
+                elif cv_status == "Needs Improvement" or (s.get("is_weakness") and (s.get("level_gap") or 0) >= 2):
+                    cv_level_gaps += 1
+                else:
+                    cv_evidenced_matches += 1
 
-            if failed:
-                failed_count += 1
-                if 'critical' in imp:
-                    has_critical_failure = True
-
-        missing = features.get("missing_skills_count", 0.0)
-        total = max(1.0, features.get("total_required_skills", 1.0))
-        if missing / total >= 0.75:
+        missing_feature = features.get("missing_skills_count", 0.0)
+        total_feature = max(1.0, features.get("total_required_skills", 1.0))
+        if missing_feature / total_feature >= 0.75:
             return "Major Upskill Required", 0.95
 
         if required_count == 0:
             return "Interview Ready", 0.85
 
-        share = failed_count / required_count
-        if share <= 0.20 and not has_critical_failure:
+        if is_zero_assessments:
+            # 1. Zero assessments completed: generate appropriate preliminary verdict based on CV evidence
+            # Do NOT automatically classify candidate as unready
+            cv_match_ratio = cv_evidenced_matches / required_count
+            if cv_match_ratio >= 0.60 and cv_level_gaps == 0:
+                return "Interview Ready", 0.82
+            elif cv_match_ratio >= 0.30 or (cv_level_gaps <= 1 and unverified_cv_missing <= (required_count * 0.70)):
+                return "Short-Term Prep", 0.80
+            else:
+                return "Major Upskill Required", 0.85
+
+        # 2. Candidate has completed assessments:
+        # Assessed quiz failures are ground truth confirmed deficiencies.
+        # Skills missing from CV are unverified, not treated as hard failures.
+        deficit_score = confirmed_quiz_failures + (cv_level_gaps * 0.5) + (unverified_cv_missing * 0.3)
+        deficit_share = deficit_score / required_count
+
+        if (confirmed_quiz_failures == 0 and deficit_share <= 0.25 and not has_critical_failure):
             return "Interview Ready", 0.85
-        elif share <= 0.40:
+        elif (deficit_share <= 0.50 and confirmed_quiz_failures <= 1):
             return "Short-Term Prep", 0.80
         else:
             return "Major Upskill Required", 0.88
@@ -146,9 +181,15 @@ class Model2FinalRecommendationPredictor:
             ml_override_attempted = False
 
         # Final verdict defaults to rules unless ML is proven on eval harness
-        # (For now, rules win as requested)
         final_verdict = rules_verdict
         confidence = rules_conf
+
+        assessed_count = sum(
+            1 for s in (raw_skills or [])
+            if s.get("total_score") is not None or s.get("assessed_level") is not None
+        )
+        is_preliminary = (assessed_count == 0)
+        verification_status = "Unverified (Preliminary CV Evidence)" if is_preliminary else "Assessment Verified"
 
         priority_skills = compute_priority_skills(raw_skills, top_n=5, gaps_only=True)
         readiness_reasons = generate_readiness_reasons(final_verdict, features, raw_skills=raw_skills)
@@ -161,7 +202,9 @@ class Model2FinalRecommendationPredictor:
             "ml_verdict": ml_verdict,
             "confidence": confidence,
             "ml_override_attempted": ml_override_attempted,
-            "priority_skills": priority_skills
+            "priority_skills": priority_skills,
+            "is_preliminary": is_preliminary,
+            "verification_status": verification_status
         }
 
 
@@ -187,46 +230,77 @@ def generate_readiness_reasons(
             if not s.get("matched", True) or s.get("cv_match_status") == "Missing"
         )
         matched = max(0, total - missing)
+        assessed_count = sum(
+            1 for s in raw_skills
+            if s.get("total_score") is not None or s.get("assessed_level") is not None
+        )
     else:
         total = int(features.get("total_required_skills", 0))
         missing = int(features.get("missing_skills_count", 0))
         matched = max(0, total - missing)
+        assessed_count = int(features.get("assessed_skills_count", 0))
 
     # 1. Plain-language required skill coverage
     if total > 0:
-        if missing == 0:
-            reasons.append(f"Strong qualification match: all {total} required skills were identified in your CV evidence.")
+        if assessed_count == 0:
+            if missing == 0:
+                reasons.append(f"Strong qualification match: all {total} required skills were identified in your CV evidence (technical proficiency has not yet been verified via assessments).")
+            else:
+                reasons.append(f"Found evidence for {matched} of {total} required skills directly in your CV (technical proficiency has not yet been verified via assessments).")
         else:
-            reasons.append(f"Found evidence for {matched} of {total} required skills directly in your CV.")
+            if missing == 0:
+                reasons.append(f"Strong qualification match: all {total} required skills were identified in your CV evidence.")
+            else:
+                reasons.append(f"Found evidence for {matched} of {total} required skills directly in your CV.")
     else:
         reasons.append("Skills evaluated against provided job requirements.")
 
-    # 2. Key gaps or strengths identified
-    missing_skill_names: List[str] = []
+    # 2. Key gaps or strengths identified (Distinguish unverified from confirmed lack)
+    unverified_names: List[str] = []
+    gap_names: List[str] = []
     if raw_skills:
         for s in raw_skills:
+            name = s.get("skill")
+            if not name:
+                continue
             if not s.get("matched", True) or s.get("cv_match_status") == "Missing":
-                name = s.get("skill")
-                if name and name not in missing_skill_names:
-                    missing_skill_names.append(name)
+                if name not in unverified_names:
+                    unverified_names.append(name)
+            elif s.get("is_weakness") or (s.get("level_gap") and s.get("level_gap") > 0) or s.get("cv_match_status") == "Needs Improvement":
+                if name not in gap_names:
+                    gap_names.append(name)
 
-    if missing_skill_names:
-        displayed_names = ", ".join(missing_skill_names[:2])
-        if len(missing_skill_names) > 2:
-            reasons.append(f"Skill gaps identified in {displayed_names} and {len(missing_skill_names) - 2} other area(s).")
+    if gap_names:
+        displayed = ", ".join(gap_names[:2])
+        if len(gap_names) > 2:
+            reasons.append(f"Confirmed skill gaps identified in {displayed} and {len(gap_names) - 2} other area(s); targeted practice recommended.")
         else:
-            reasons.append(f"Skill gap identified in {displayed_names}; targeted practice recommended.")
+            reasons.append(f"Confirmed skill gap identified in {displayed}; targeted practice recommended.")
+    elif unverified_names:
+        displayed = ", ".join(unverified_names[:2])
+        if len(unverified_names) > 2:
+            reasons.append(f"Skills not mentioned in CV: {displayed} and {len(unverified_names) - 2} other(s); take technical assessments to demonstrate proficiency.")
+        else:
+            reasons.append(f"Skill not mentioned in CV: {displayed}; take assessment to verify proficiency.")
     else:
         reasons.append("No critical qualification gaps identified across the required core competencies.")
 
     # 3. Verdict-specific plain-language guidance
     verdict_clean = (verdict or "").lower()
-    if "interview ready" in verdict_clean:
-        reasons.append("Candidate demonstrates high proficiency alignment; ready to proceed to technical interviews.")
-    elif "major upskill" in verdict_clean:
-        reasons.append("Foundational upskilling and structured learning recommended prior to technical interviews.")
+    if assessed_count == 0:
+        if "interview ready" in verdict_clean:
+            reasons.append("Preliminary verdict: CV evidence indicates strong alignment; complete technical assessments to verify readiness.")
+        elif "major upskill" in verdict_clean:
+            reasons.append("Preliminary verdict: Foundational upskilling and completing technical assessments recommended.")
+        else:
+            reasons.append("Preliminary verdict: Targeted practice and completing skill assessments will verify candidate readiness.")
     else:
-        reasons.append("Targeted practice on identified skill gaps will quickly improve candidate match readiness.")
+        if "interview ready" in verdict_clean:
+            reasons.append("Candidate demonstrates high proficiency alignment; ready to proceed to technical interviews.")
+        elif "major upskill" in verdict_clean:
+            reasons.append("Foundational upskilling and structured learning recommended prior to technical interviews.")
+        else:
+            reasons.append("Targeted practice on identified skill gaps will quickly improve candidate match readiness.")
 
     return reasons[:3]
 

@@ -107,11 +107,9 @@ def extract_model2_features(combined_analysis: Dict[str, Any]) -> Dict[str, floa
             except (ValueError, TypeError):
                 gaps.append(0.0)
         elif not matched:
-            # Unassessed missing skill: compute level gap from required_level vs candidate(0)
             req_str = str(s.get("required_level") or s.get("level", "basic")).lower().strip()
             gaps.append(float(LEVEL_MAP.get(req_str, 1)))
         else:
-            # Unassessed matched skill
             gaps.append(0.0)
 
     average_skill_gap = round(float(np.mean(gaps)), 4) if gaps else 0.0

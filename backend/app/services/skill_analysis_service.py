@@ -368,11 +368,44 @@ def combine_cv_and_assessment(
         assessment_data = lookup_assessment(skill_name)
         assessed_lvl = assessment_data.get("assessed_level") if assessment_data else None
 
-        # Level gap calculation for assessment evaluation
-        level_gap = calculate_level_gap(req_level, assessed_lvl)
+        # Level gap calculation:
+        # If assessed: calculate gap between required level and assessed level
+        # If unassessed: calculate gap based on CV evidence (or missing status)
+        req_clean = (req_level or "basic").strip().lower()
+        req_val = LEVEL_MAP.get(req_clean, 1)
 
-        # ML proficiency level prediction
         scores = extract_assessment_scores(db_or_assessments, assessment_data)
+        total_score = scores.get("total_score") if scores else None
+
+        if assessed_lvl is not None:
+            # Assessed skill evaluation
+            level_gap = calculate_level_gap(req_level, assessed_lvl)
+            weakness_info = calculate_weakness(level_gap=level_gap, total_score=total_score)
+            is_weakness = weakness_info["is_weakness"]
+            weakness_reason = weakness_info["weakness_reason"]
+
+            model1_rec, model1_conf = generate_model1_evaluator_output(
+                required_level=req_level,
+                assessed_level=assessed_lvl,
+                scores=scores,
+                cv_level=cv_level
+            )
+        else:
+            # Unassessed skill: level_gap is strictly None until assessed
+            level_gap = None
+            if not matched_flag or cv_match_status == "Missing":
+                is_weakness = True
+                weakness_reason = "UNVERIFIED_IN_CV"
+            elif cv_match_status == "Needs Improvement":
+                is_weakness = True
+                weakness_reason = "LEVEL_GAP"
+            else:
+                is_weakness = False
+                weakness_reason = "NONE"
+            model1_rec = None
+            model1_conf = None
+
+        # ML proficiency level prediction (for score interpolation)
         ml_predicted_lvl = generate_ml_prediction(
             matched=matched_flag,
             required_level=req_level,
@@ -380,30 +413,41 @@ def combine_cv_and_assessment(
             scores=scores
         )
 
-        model1_rec, model1_conf = generate_model1_evaluator_output(
-            required_level=req_level,
-            assessed_level=assessed_lvl,
-            scores=scores,
-            cv_level=cv_level
-        )
+        # Generate contextual recommendation and priority
+        is_pref = (importance or "required").strip().lower() == "preferred"
+        if is_weakness:
+            if is_pref:
+                priority = "MEDIUM" if (level_gap and level_gap >= 2) else "LOW"
+            else:
+                # Confirmed assessed failure or severe gap is HIGH priority; unverified CV missing is MEDIUM priority
+                if (level_gap and level_gap >= 2) or weakness_reason in ["LEVEL_GAP_AND_LOW_SCORE"] or (total_score is not None and total_score < 0.40):
+                    priority = "HIGH"
+                elif weakness_reason in ["UNVERIFIED_IN_CV", "MISSING_SKILL"]:
+                    priority = "MEDIUM"
+                else:
+                    priority = "MEDIUM"
+        else:
+            priority = "LOW"
 
-        total_score = scores.get("total_score") if scores else None
-
-        # Calculate deterministic weakness
-        weakness_info = calculate_weakness(level_gap=level_gap, total_score=total_score)
-        is_weakness = weakness_info["is_weakness"]
-        weakness_reason = weakness_info["weakness_reason"]
-
-        # Generate rule-based recommendation
-        rec_info = generate_recommendation(
-            skill=skill_name,
-            required_level=req_level,
-            assessed_level=assessed_lvl,
-            level_gap=level_gap,
-            total_score=total_score,
-            is_weakness=is_weakness,
-            weakness_reason=weakness_reason
-        )
+        if assessed_lvl is not None:
+            if is_weakness:
+                score_str = f"{int(total_score * 100)}%" if total_score is not None else "0%"
+                recommendation = f"Targeted practice required to elevate {skill_name} from {assessed_lvl} to {req_level}."
+                rec_reason = f"Assessment score: {score_str} ({assessed_lvl} level vs {req_level} required)."
+            else:
+                score_str = f"{int(total_score * 100)}%" if total_score is not None else "100%"
+                recommendation = f"Proficiency verified at {assessed_lvl} level. Maintain skills with ongoing practice."
+                rec_reason = f"Candidate demonstrated {assessed_lvl} proficiency matching job requirement ({score_str} score)."
+        else:
+            if weakness_reason in ["UNVERIFIED_IN_CV", "MISSING_SKILL"]:
+                recommendation = f"Skill not mentioned in CV (unverified). Take assessment to demonstrate proficiency or update your CV."
+                rec_reason = "Skill was not identified in CV evidence. Candidate may possess this skill; assessment recommended to verify."
+            elif weakness_reason == "LEVEL_GAP":
+                recommendation = f"CV indicates {cv_level} level, but job requires {req_level}. Take assessment to verify true proficiency."
+                rec_reason = f"Identified CV level ({cv_level}) is below target requirement ({req_level})."
+            else:
+                recommendation = f"Candidate satisfies {req_level} requirement based on CV evidence. Assessment optional for verification."
+                rec_reason = f"CV contains evidence satisfying {req_level} level standard."
 
         improvement_prob = assessment_data.get("improvement_probability") if assessment_data else None
         if improvement_prob is None and isinstance(db_or_assessments, Session) and user_id is not None:
@@ -431,9 +475,9 @@ def combine_cv_and_assessment(
             "total_score": total_score,
             "is_weakness": is_weakness,
             "weakness_reason": weakness_reason,
-            "priority": rec_info["priority"],
-            "recommendation": rec_info["recommendation"],
-            "recommendation_reason": rec_info["reason"],
+            "priority": priority,
+            "recommendation": recommendation,
+            "recommendation_reason": rec_reason,
             "skill_recommendation": model1_rec,
             "recommendation_confidence": model1_conf,
             "evidence": evidence,

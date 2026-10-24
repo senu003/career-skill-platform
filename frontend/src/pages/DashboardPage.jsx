@@ -286,30 +286,36 @@ export default function DashboardPage() {
     const cvStatus = item.cv_match_status || (item.matched ? 'Match' : 'Missing');
     const cvRaw = String(item.cv_level || '').trim().toLowerCase();
     const reqRaw = String(item.required_level || item.level || '').trim().toLowerCase();
+    const reqVal = LEVEL_MAP[reqRaw] || 0;
 
-    // Totally missing: not found in CV at all
+    // 1. If candidate completed technical assessment, it is ground truth
+    const assRaw = String(item.assessed_level || '').trim().toLowerCase();
+    const assVal = LEVEL_MAP[assRaw] || 0;
+    if (assVal > 0) {
+      if (reqVal > 0) {
+        if (assVal < reqVal) return 'level_gap';
+        if (assVal > reqVal) return 'exceeds';
+        return 'meets';
+      }
+      return 'meets';
+    }
+
+    // 2. Unassessed: check CV presence
     if (cvStatus === 'Missing' || !item.matched || cvRaw === 'not_found') {
       return 'totally_missing';
     }
 
     const cvVal = LEVEL_MAP[cvRaw] || 0;
-    const reqVal = LEVEL_MAP[reqRaw] || 0;
 
     // If either side has no numeric level (unspecified), check match status
     if (cvVal === 0 || reqVal === 0) {
-      // Both unspecified but still matched — treat as meets
       if (cvStatus === 'Match') return 'meets';
       if (cvStatus === 'Needs Improvement') return 'level_gap';
-      return 'meets'; // graceful fallback
+      return 'meets';
     }
 
-    // Override with assessed level if available
-    const assRaw = String(item.assessed_level || '').trim().toLowerCase();
-    const assVal = LEVEL_MAP[assRaw] || 0;
-    const compareVal = assVal > 0 ? assVal : cvVal;
-
-    if (compareVal < reqVal) return 'level_gap';
-    if (compareVal > reqVal) return 'exceeds';
+    if (cvVal < reqVal) return 'level_gap';
+    if (cvVal > reqVal) return 'exceeds';
     return 'meets';
   };
 
@@ -1074,7 +1080,7 @@ export default function DashboardPage() {
                                       fontSize: '0.75rem',
                                     }}
                                   >
-                                    Assessed: {formatLevel(item.assessed_level)}
+                                    Assessed: {formatLevel(item.assessed_level)} {item.total_score !== null && item.total_score !== undefined ? `(${Math.round(item.total_score > 1 ? item.total_score : item.total_score * 100)}%)` : ''}
                                   </span>
                                   {isAvailable && (
                                     <button
@@ -1117,7 +1123,7 @@ export default function DashboardPage() {
                                 )
                               ) : (
                                 <span className="text-xs text-muted" style={{ fontStyle: 'italic' }}>
-                                  CV verified
+                                  {isMissingInCv ? 'No quiz in DB' : 'CV verified'}
                                 </span>
                               )}
                             </td>

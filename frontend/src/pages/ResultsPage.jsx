@@ -17,10 +17,10 @@ export default function ResultsPage() {
   const { skill, attemptId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { analysisResult, setAnalysisResult, updateSkillResult } = useAssessment();
+  const { analysisResult, setAnalysisResult, updateSkillResult, refreshAnalysis } = useAssessment();
 
   const queryAttemptId = searchParams.get('attempt_id') || searchParams.get('attemptId');
-  const analysisId = searchParams.get('analysis_id');
+  const analysisId = searchParams.get('analysis_id') || analysisResult?.analysis_id;
   const targetAttemptId = attemptId || queryAttemptId;
   const rawSkill = skill ? decodeURIComponent(skill) : '';
 
@@ -394,7 +394,7 @@ export default function ResultsPage() {
               </button>
             ) : (
               <button
-                onClick={() => navigate('/recommendation')}
+                onClick={() => navigate(analysisId ? `/recommendation?analysis_id=${encodeURIComponent(analysisId)}` : '/recommendation')}
                 className="btn btn-primary"
                 style={{ padding: '0.6rem 1.25rem', fontSize: '0.875rem' }}
               >

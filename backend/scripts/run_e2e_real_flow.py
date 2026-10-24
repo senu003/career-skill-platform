@@ -2,9 +2,11 @@ import os
 import sys
 import json
 import io
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from sqlalchemy import text
-from reportlab.pdfgen import canvas
+from sqlalchemy.orm import Session
+from reportlab.pdfgen import canvas  # type: ignore
 
 # Add parent backend directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -43,7 +45,19 @@ class RealFlowLogger:
         if description:
             self.report_markdown.append(f"{description}\n")
 
-    def log_api_call(self, step_num: int, step_name: str, method: str, url: str, headers: dict = None, req_body: dict = None, files: dict = None, form_data: dict = None, resp_status: int = 200, resp_body: dict = None):
+    def log_api_call(
+        self,
+        step_num: int,
+        step_name: str,
+        method: str,
+        url: str,
+        headers: Optional[Dict[str, Any]] = None,
+        req_body: Optional[Any] = None,
+        files: Optional[Dict[str, Any]] = None,
+        form_data: Optional[Dict[str, Any]] = None,
+        resp_status: int = 200,
+        resp_body: Optional[Any] = None
+    ):
         h_copy = dict(headers) if headers else {}
         if "Authorization" in h_copy and len(h_copy["Authorization"]) > 25:
             token_snippet = h_copy["Authorization"][:20] + "...[TRUNCATED_JWT_TOKEN]"
@@ -111,7 +125,7 @@ class RealFlowLogger:
         self.report_markdown.append("\n".join(md))
 
 
-def answer_all_questions_strategy(logger: RealFlowLogger, db: SessionLocal, attempt_id: int, auth_headers: dict, pass_basic_fail_inter: bool, force_all_correct: bool, start_step: int) -> int:
+def answer_all_questions_strategy(logger: RealFlowLogger, db: Session, attempt_id: int, auth_headers: dict, pass_basic_fail_inter: bool, force_all_correct: bool, start_step: int) -> int:
     """Answers all questions for an assessment across levels until completion."""
     step_idx = start_step
     while True:
@@ -163,15 +177,18 @@ def answer_all_questions_strategy(logger: RealFlowLogger, db: SessionLocal, atte
             q_db = db.query(AssessmentQuestion).filter(AssessmentQuestion.id == q["id"]).first()
             
             if force_all_correct:
-                ans = q_db.correct_answer if q_db else "A"
+                ans = getattr(q_db, "correct_answer", "A") if q_db else "A"
             elif pass_basic_fail_inter:
                 # If basic level, pass (correct answer). If intermediate level, fail (wrong answer).
-                if q_db and q_db.level.lower() == "basic":
-                    ans = q_db.correct_answer
+                q_level = str(getattr(q_db, "level", "")).lower() if q_db else ""
+                corr = str(getattr(q_db, "correct_answer", "A")) if q_db else "A"
+                if q_level == "basic":
+                    ans = corr
                 else:
-                    ans = "D" if q_db and q_db.correct_answer != "D" else "C"
+                    ans = "D" if corr != "D" else "C"
             else:
-                ans = "D" if q_db and q_db.correct_answer != "D" else "C"
+                corr = str(getattr(q_db, "correct_answer", "A")) if q_db else "A"
+                ans = "D" if corr != "D" else "C"
 
             ans_payload = {
                 "attempt_id": attempt_id,
@@ -253,6 +270,7 @@ def run_e2e_real_verification():
 
     # Verify DB state in PostgreSQL
     db_user = db.query(User).filter(User.id == user_id).first()
+    assert db_user is not None
     logger.log_db_state("users", [{
         "id": db_user.id,
         "name": db_user.name,
@@ -398,6 +416,7 @@ def run_e2e_real_verification():
 
     # Database Verification for Attempt 0
     db_att0 = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == att0_id).first()
+    assert db_att0 is not None
     db_ans0 = db.query(AssessmentAnswer).filter(AssessmentAnswer.attempt_id == att0_id).all()
 
     logger.log_db_state("assessment_attempts (t0)", [{
@@ -458,6 +477,7 @@ def run_e2e_real_verification():
 
     # Database Verification for Attempt 1
     db_att1 = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == att1_id).first()
+    assert db_att1 is not None
     logger.log_db_state("assessment_attempts (t1)", [{
         "id": db_att1.id,
         "user_id": db_att1.user_id,

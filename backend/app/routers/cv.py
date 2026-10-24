@@ -97,12 +97,13 @@ def get_latest_cv(
     cv_record = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.uploaded_at.desc()).first()
     if not cv_record:
         return {"has_cv": False, "cv": None}
+    cv_up = getattr(cv_record, "uploaded_at", None)
     return {
         "has_cv": True,
         "cv": {
-            "id": cv_record.id,
-            "file_name": cv_record.file_name,
-            "uploaded_at": cv_record.uploaded_at.isoformat() if cv_record.uploaded_at else None
+            "id": getattr(cv_record, "id", None),
+            "file_name": getattr(cv_record, "file_name", None),
+            "uploaded_at": cv_up.isoformat() if cv_up is not None else None
         }
     }
 
@@ -121,9 +122,10 @@ def get_past_analysis_sessions(
     # Get latest CV text for matching if available
     latest_cv = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.uploaded_at.desc()).first()
     cv_text = ""
-    if latest_cv and latest_cv.file_path and os.path.exists(latest_cv.file_path):
+    latest_path = getattr(latest_cv, "file_path", None) if latest_cv else None
+    if latest_path and os.path.exists(str(latest_path)):
         try:
-            pdf_data = extract_pdf_text(latest_cv.file_path)
+            pdf_data = extract_pdf_text(str(latest_path))
             cv_text = pdf_data.get("text", "")
         except Exception:
             pass
@@ -135,9 +137,10 @@ def get_past_analysis_sessions(
             cv_obj = latest_cv
 
         parsed_skills = []
-        if job and job.description:
+        job_desc = getattr(job, "description", None) if job else None
+        if job_desc is not None:
             try:
-                parsed_skills = json.loads(job.description)
+                parsed_skills = json.loads(str(job_desc))
             except Exception:
                 pass
 
@@ -147,9 +150,10 @@ def get_past_analysis_sessions(
         combined = {"skills": []}
 
         if parsed_skills:
-            if a.raw_analysis_data:
+            raw_analysis = getattr(a, "raw_analysis_data", None)
+            if raw_analysis is not None:
                 try:
-                    evaluated_skills = json.loads(a.raw_analysis_data)
+                    evaluated_skills = json.loads(str(raw_analysis))
                 except Exception:
                     evaluated_skills = []
             else:
@@ -163,19 +167,20 @@ def get_past_analysis_sessions(
             matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
             missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
             score_data = calculate_skill_score(matched_skills, missing_skills)
+            analysis_id_val = int(str(getattr(a, "id"))) if getattr(a, "id", None) is not None else None
             combined = combine_cv_and_assessment({
                 "skills": evaluated_skills,
                 "matched_skills": matched_skills,
                 "missing_skills": missing_skills,
                 "score_data": score_data
-            }, db, current_user.id, a.id)
+            }, db, current_user.id, analysis_id_val)
 
         skills_list = combined.get("skills", [])
         total_skills_count = len(skills_list) if skills_list else len(parsed_skills)
         matched_skills_count = len([s for s in skills_list if s.get("matched") and not s.get("is_weakness")]) if skills_list else score_data.get("matched_count", 0)
         improvement_skills_count = len([s for s in skills_list if s.get("is_weakness") or not s.get("matched")]) if skills_list else score_data.get("missing_count", 0)
 
-        score_val = float(a.overall_score) if a.overall_score is not None else float(score_data.get("score", 0))
+        score_val = float(str(a.overall_score)) if a.overall_score is not None else float(score_data.get("score", 0))
 
         # Readiness categorization
         if score_val >= 80:
@@ -207,7 +212,7 @@ def get_past_analysis_sessions(
             "assessment_status": assessment_status,
             "overall_readiness": overall_readiness,
             "status_badge": "Analysis Complete",
-            "created_at": a.created_at.isoformat() if a.created_at else None
+            "created_at": getattr(a, "created_at").isoformat() if getattr(a, "created_at", None) is not None else None
         })
     return {"sessions": sessions}
 
@@ -231,17 +236,20 @@ def get_analysis_session_detail(
     if not cv_record:
         cv_record = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.uploaded_at.desc()).first()
 
-    parsed_requirements = parse_and_validate_requirements(job_record.description) if job_record and job_record.description else []
+    job_desc = getattr(job_record, "description", None) if job_record else None
+    parsed_requirements = parse_and_validate_requirements(str(job_desc)) if job_desc else []
 
     cv_text = ""
-    if cv_record and cv_record.file_path and os.path.exists(cv_record.file_path):
-        pdf_data = extract_pdf_text(cv_record.file_path)
+    cv_path = getattr(cv_record, "file_path", None) if cv_record else None
+    if cv_path and os.path.exists(str(cv_path)):
+        pdf_data = extract_pdf_text(str(cv_path))
         cv_text = pdf_data.get("text", "")
 
-    if analysis_record.raw_analysis_data and not force_reanalyze:
-        evaluated_skills = json.loads(analysis_record.raw_analysis_data)
+    raw_data = getattr(analysis_record, "raw_analysis_data", None)
+    if raw_data and not force_reanalyze:
+        evaluated_skills = json.loads(str(raw_data))
     else:
-        if not force_reanalyze and not analysis_record.raw_analysis_data:
+        if not force_reanalyze and not raw_data:
             # Fallback for old sessions without Gemini invocation
             evaluated_skills = [
                 {
@@ -264,7 +272,7 @@ def get_analysis_session_detail(
                 ]
             
             if force_reanalyze:
-                analysis_record.raw_analysis_data = json.dumps(evaluated_skills)
+                setattr(analysis_record, "raw_analysis_data", json.dumps(evaluated_skills))
                 db.commit()
 
     matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
@@ -272,7 +280,7 @@ def get_analysis_session_detail(
     score_data = calculate_skill_score(matched_skills, missing_skills)
 
     cv_matching_result = {
-        "filename": cv_record.file_name if cv_record else "Resume.pdf",
+        "filename": getattr(cv_record, "file_name", "Resume.pdf") if cv_record else "Resume.pdf",
         "pages": 1,
         "skills": evaluated_skills,
         "matched_skills": matched_skills,
@@ -280,15 +288,16 @@ def get_analysis_session_detail(
         "score_data": score_data
     }
 
+    analysis_record_id = int(str(getattr(analysis_record, "id"))) if getattr(analysis_record, "id", None) is not None else None
     result = combine_cv_and_assessment(
         cv_matching_result,
         db_or_assessments=db,
         user_id=current_user.id,
-        analysis_id=analysis_record.id,
+        analysis_id=analysis_record_id,
     )
     result["job_title"] = job_record.title if job_record else "Job Position"
     result["company"] = job_record.company if job_record else ""
-    result["analysis_id"] = analysis_record.id
+    result["analysis_id"] = analysis_record_id
     return result
 
 
@@ -402,11 +411,12 @@ async def analyze_cv(
         elif effective_user_id:
             cv_record = db.query(CV).filter(CV.user_id == effective_user_id).order_by(CV.uploaded_at.desc()).first()
 
-        if cv_record and cv_record.file_path and os.path.exists(cv_record.file_path):
-            pdf_data = extract_pdf_text(cv_record.file_path)
+        cv_path_val = getattr(cv_record, "file_path", None) if cv_record else None
+        if cv_path_val and os.path.exists(str(cv_path_val)):
+            pdf_data = extract_pdf_text(str(cv_path_val))
             cv_data = {
-                "filename": cv_record.file_name,
-                "file_path": cv_record.file_path,
+                "filename": str(getattr(cv_record, "file_name", "Resume.pdf")),
+                "file_path": str(cv_path_val),
                 "pages": pdf_data["pages"],
                 "text": pdf_data["text"]
             }
@@ -416,7 +426,7 @@ async def analyze_cv(
                 detail="No CV file uploaded and no saved candidate CV found. Please upload a PDF resume."
             )
 
-    cv_text = cv_data.get("text", "")
+    cv_text = str(cv_data.get("text", "")) if cv_data else ""
 
     # 3. Evaluate candidate CV against requirements using Gemini
     evaluated_skills = evaluate_cv_with_gemini(cv_text, parsed_requirements)
@@ -427,6 +437,7 @@ async def analyze_cv(
     score_data = calculate_skill_score(matched_skills, missing_skills)
 
     # 5. Save Job & Analysis session records for logged-in user
+    analysis_record: Optional[Analysis] = None
     if user_exists:
         title_str = job_title or "Job Position"
         company_str = company or "Target Company"
@@ -456,6 +467,7 @@ async def analyze_cv(
         )
         db.add(analysis_record)
         db.commit()
+        db.refresh(analysis_record)
 
     # 6. Build raw matching result
     cv_matching_result = {
@@ -467,14 +479,16 @@ async def analyze_cv(
         "score_data": score_data
     }
 
+    analysis_id_val = int(str(getattr(analysis_record, "id"))) if (analysis_record is not None and getattr(analysis_record, "id", None) is not None) else None
+
     # 7. Combine CV matching with completed assessment results
     result = combine_cv_and_assessment(
         cv_matching_result,
         db_or_assessments=db,
         user_id=effective_user_id,
-        analysis_id=analysis_record.id if user_exists else None,
+        analysis_id=analysis_id_val,
         include_prior=include_prior_assessments,
     )
-    if user_exists:
-        result["analysis_id"] = analysis_record.id
+    if analysis_id_val is not None:
+        result["analysis_id"] = analysis_id_val
     return result
