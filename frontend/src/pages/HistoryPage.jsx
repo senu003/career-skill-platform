@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, Briefcase, Plus, Upload, CheckCircle2, AlertCircle, ArrowRight,
-  RefreshCw, Eye, RotateCcw, Sparkles, Calendar,
-  X, Check, Play
+  RefreshCw, RotateCcw, Sparkles, Calendar,
+  X, Play, Layers, Check
 } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
@@ -27,8 +27,6 @@ export default function HistoryPage() {
   // Modal States
   const [showNewAnalysisModal, setShowNewAnalysisModal] = useState(false);
   const [selectedSessionForRetake, setSelectedSessionForRetake] = useState(null);
-  const [selectedSessionResult, setSelectedSessionResult] = useState(null);
-  const [loadingSessionDetail, setLoadingSessionDetail] = useState(false);
 
   // New Analysis Intake Form State
   const [newAnalysisCvChoice, setNewAnalysisCvChoice] = useState('latest'); // 'latest' | 'new'
@@ -90,9 +88,9 @@ export default function HistoryPage() {
   // Helper for Readiness badge styling
   const getReadinessBadgeClass = (lvl) => {
     const clean = (lvl || '').toLowerCase();
-    if (clean.includes('advanced') || clean.includes('expert')) return 'readiness-badge-advanced';
-    if (clean.includes('intermediate')) return 'readiness-badge-intermediate';
-    if (clean.includes('basic')) return 'readiness-badge-basic';
+    if (clean.includes('advanced') || clean.includes('interview') || clean.includes('ready')) return 'readiness-badge-advanced';
+    if (clean.includes('intermediate') || clean.includes('short-term') || clean.includes('prep')) return 'readiness-badge-intermediate';
+    if (clean.includes('basic') || clean.includes('major') || clean.includes('upskill')) return 'readiness-badge-basic';
     return 'readiness-badge-foundational';
   };
 
@@ -138,34 +136,38 @@ export default function HistoryPage() {
     }
   };
 
-  // Action Handler: Open View Result Modal for a Session
-  const handleViewResult = async (session) => {
-    setLoadingSessionDetail(true);
-    setSelectedSessionResult(null);
-    try {
-      const res = await fetchWithAuth(`/cv/sessions/${session.analysis_id}`);
-      setSelectedSessionResult(res);
-      setAnalysisResult(res);
-    } catch (err) {
-      alert(err.message || 'Failed to retrieve session analysis result.');
-    } finally {
-      setLoadingSessionDetail(false);
-    }
-  };
-
-  // Action Handler: Directly Navigate to Full Report for a Historical Session
-  const handleOpenReport = async (session) => {
+  // Action Handler: Open full CV & JD Diagnostic Grid on Dashboard
+  const handleOpenDiagnosticGrid = async (session, e) => {
+    if (e) e.stopPropagation();
     try {
       const res = await fetchWithAuth(`/cv/sessions/${session.analysis_id}`);
       if (res) {
         setAnalysisResult(res);
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Session detail fetch error:', err);
+    }
+    navigate(`/dashboard?analysis_id=${session.analysis_id}`);
+  };
+
+
+  // Action Handler: Directly Navigate to Full Report for a Historical Session
+  const handleOpenReport = async (session, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await fetchWithAuth(`/cv/sessions/${session.analysis_id}`);
+      if (res) {
+        setAnalysisResult(res);
+      }
+    } catch (err) {
+      console.warn('Session report fetch error:', err);
+    }
     navigate(`/recommendation?analysis_id=${session.analysis_id}`);
   };
 
   // Action Handler: Open Retake Assessment Modal for a Session
-  const handleOpenRetakeModal = (session) => {
+  const handleOpenRetakeModal = (session, e) => {
+    if (e) e.stopPropagation();
     setSelectedSessionForRetake(session);
   };
 
@@ -240,15 +242,20 @@ export default function HistoryPage() {
       setNewAnalysisCompany('');
       setNewAnalysisJobDesc('');
 
-      // Reload sessions list & open result
+      // Reload sessions list & navigate directly to Diagnostic Grid
       await loadData();
-      setSelectedSessionResult(cvRes);
+      navigate(`/dashboard?analysis_id=${cvRes.analysis_id}`);
     } catch (err) {
       setIntakeError(err.message || 'Failed to analyze job match.');
     } finally {
       setAnalyzingMatch(false);
     }
   };
+
+  // Sort past sessions by date (most recent first)
+  const sortedSessions = useMemo(() => {
+    return [...pastSessions].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }, [pastSessions]);
 
   // Loading Spinner View
   if (loading) {
@@ -452,121 +459,187 @@ export default function HistoryPage() {
             </button>
           </div>
         ) : (
-          /* PAST SESSIONS CARDS */
-          <div className="flex flex-col gap-4">
-            {pastSessions.map((sess) => {
+          /* PAST SESSIONS CARDS (DATE-BASED) */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+            {sortedSessions.map((sess) => {
               const scoreVal = sess.overall_score !== null && sess.overall_score !== undefined ? Math.round(sess.overall_score) : 0;
-              const readinessBadgeClass = getReadinessBadgeClass(sess.overall_readiness);
+              const verdictText = sess.readiness_verdict || sess.final_verdict || sess.overall_readiness || 'Analysis Complete';
+              const readinessBadgeClass = getReadinessBadgeClass(verdictText);
+              const assessedCount = sess.assessed_skills_count !== undefined
+                ? sess.assessed_skills_count
+                : (sess.skills?.filter(s => s.assessed_level !== null && s.assessed_level !== undefined).length || 0);
+              const totalSkills = sess.total_skills_count || sess.parsed_skills?.length || sess.skills?.length || 0;
+              const isPrelim = Boolean(sess.is_preliminary ?? (assessedCount === 0));
 
               return (
-                <div key={sess.analysis_id} className="history-session-card">
-                  <div className="flex justify-between items-start flex-wrap gap-4">
-                    {/* Left Column: Job Info & Match Metrics */}
-                    <div className="flex items-start gap-4" style={{ flex: '1 1 340px' }}>
-                      {/* Overall Job Match Score Pill */}
+                <div
+                  key={sess.analysis_id}
+                  onClick={(e) => handleOpenDiagnosticGrid(sess, e)}
+                  className="history-session-card"
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    border: '1px solid var(--border-color)',
+                    padding: '1.5rem',
+                    marginBottom: '0.25rem',
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleOpenDiagnosticGrid(sess, e);
+                    }
+                  }}
+                >
+                  {/* Top Bar: Title, Company, Session ID, Date & Persistence Indicator */}
+                  <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-lg text-main flex items-center gap-2" style={{ margin: 0 }}>
+                        <Briefcase size={18} style={{ color: 'var(--primary-600)' }} />
+                        <span>{sess.job_title || 'Target Job Position'}</span>
+                      </h3>
+                      {sess.company && (
+                        <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>
+                          {sess.company}
+                        </span>
+                      )}
+                      <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.68rem', border: '1px solid #cbd5e1' }}>
+                        Session #{sess.analysis_id}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="text-xs text-muted flex items-center gap-1.5" style={{ backgroundColor: '#f8fafc', padding: '0.25rem 0.65rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                        <Calendar size={13} style={{ color: 'var(--primary-600)' }} />
+                        <span>Analyzed {formatDate(sess.created_at)}</span>
+                      </div>
+                      <span
+                        className="badge"
+                        style={{
+                          backgroundColor: '#ecfdf5',
+                          color: '#059669',
+                          border: '1px solid #a7f3d0',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                        }}
+                        title="Stored final analysis version. Retaking quizzes will automatically update this record."
+                      >
+                        <CheckCircle2 size={12} />
+                        <span>Stored Final Version</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Main Metrics & Content Row */}
+                  <div className="flex justify-between items-center flex-wrap gap-4 mb-3">
+                    <div className="flex items-center gap-4 flex-wrap" style={{ flex: '1 1 340px' }}>
+                      {/* Overall Match Score Pill */}
                       <div className="session-score-pill">
-                        <span className="text-xs text-muted font-semibold uppercase tracking-wider" style={{ fontSize: '0.65rem' }}>
+                        <span className="text-xs text-muted font-semibold uppercase tracking-wider" style={{ fontSize: '0.62rem' }}>
                           Overall Match
                         </span>
-                        <div className="session-score-value mt-1">
+                        <div className="session-score-value mt-0.5">
                           {scoreVal}%
                         </div>
                       </div>
 
-                      {/* Job Title & Metadata */}
+                      {/* Status Badges & Progress */}
                       <div>
-                        <div className="flex items-center gap-2.5 flex-wrap mb-1">
-                          <h3 className="font-bold text-lg text-main flex items-center gap-2" style={{ margin: 0 }}>
-                            <Briefcase size={18} style={{ color: 'var(--primary-600)' }} />
-                            <span>{sess.job_title}</span>
-                          </h3>
-                          {sess.company && (
-                            <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>
-                              {sess.company}
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className={`readiness-badge ${readinessBadgeClass}`}>
+                            {verdictText}
+                          </span>
+
+                          {isPrelim ? (
+                            <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', fontSize: '0.68rem', fontWeight: 600 }}>
+                              Preliminary (Quizzes Pending)
+                            </span>
+                          ) : (
+                            <span className="badge" style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 600 }}>
+                              ✓ Quizzes Completed
                             </span>
                           )}
-                        </div>
 
-                        {/* Metadata row: CV & Date */}
-                        <div className="text-xs text-muted flex items-center gap-4 flex-wrap mb-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <FileText size={13} style={{ color: 'var(--primary-500)' }} />
-                            <span>CV: <strong>{sess.cv_filename}</strong></span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Calendar size={13} style={{ color: 'var(--primary-500)' }} />
-                            <span>Analyzed: {formatDate(sess.created_at)}</span>
-                          </div>
-                        </div>
-
-                        {/* Metrics Row: Assessment Status & Readiness Level */}
-                        <div className="flex items-center gap-3 flex-wrap mb-2">
-                          <span className="text-xs text-muted">
-                            Assessment: <strong className="text-main">{sess.assessment_status || 'Completed'}</strong>
-                          </span>
-                          <span className="text-xs text-muted">•</span>
-                          <span className="text-xs text-muted flex items-center gap-1">
-                            Overall Readiness:
-                            <span className={`readiness-badge ${readinessBadgeClass}`}>
-                              {sess.overall_readiness || 'Intermediate'}
-                            </span>
+                          <span className="text-xs text-muted font-medium">
+                            {assessedCount} of {totalSkills} Quizzes Taken
                           </span>
                         </div>
 
-                        {/* Summary String */}
-                        <p className="text-xs font-medium text-main flex items-center gap-1.5" style={{ color: 'var(--text-body)' }}>
-                          <span>
-                            {sess.total_skills_count || sess.parsed_skills?.length || 0} skills analyzed
+                        {/* Resume & Skill Breakdown Row */}
+                        <div className="text-xs text-muted flex items-center gap-3 flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <FileText size={12} style={{ color: 'var(--primary-600)' }} />
+                            <span>Resume: <strong>{sess.cv_filename || 'Uploaded Resume'}</strong></span>
                           </span>
                           <span>•</span>
-                          <span style={{ color: 'var(--success-color)' }}>
-                            {sess.matched_skills_count || 0} matched
+                          <span className="text-emerald-700 font-semibold">
+                            {sess.matched_skills_count || 0} Matched
                           </span>
                           <span>•</span>
-                          <span style={{ color: sess.improvement_skills_count > 0 ? '#d97706' : 'var(--text-muted)' }}>
-                            {sess.improvement_skills_count || 0} skills need improvement
+                          <span style={{ color: (sess.improvement_skills_count || 0) > 0 ? '#b91c1c' : 'var(--text-muted)' }}>
+                            {sess.improvement_skills_count || 0} Skill Gaps
                           </span>
-                        </p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Right Column: Status Badge & Actions */}
-                    <div className="flex flex-col items-end gap-3" style={{ minWidth: '170px' }}>
-                      <span className="badge badge-success flex items-center gap-1" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}>
-                        <CheckCircle2 size={13} />
-                        <span>{sess.status_badge || 'Analysis Complete'}</span>
-                      </span>
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                      {/* Primary CTA: Open Diagnostic Grid */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenDiagnosticGrid(sess, e)}
+                        className="btn btn-primary text-xs flex items-center gap-1.5"
+                        style={{ padding: '0.55rem 1.05rem', fontWeight: 600 }}
+                        title="Open the CV vs JD skill comparison grid to review skills and take quizzes"
+                      >
+                        <Layers size={14} />
+                        <span>Open Diagnostic Grid</span>
+                        <ArrowRight size={13} />
+                      </button>
 
-                      <div className="flex items-center gap-2 mt-1 flex-wrap justify-end">
-                        <button
-                          onClick={() => handleOpenReport(sess)}
-                          className="btn btn-primary text-xs"
-                          style={{ padding: '0.5rem 0.85rem' }}
-                        >
-                          <Sparkles size={14} />
-                          <span>Full Report</span>
-                        </button>
+                      {/* Full Report */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenReport(sess, e)}
+                        className="btn btn-outline text-xs flex items-center gap-1.5"
+                        style={{ padding: '0.55rem 0.9rem' }}
+                        title="View comprehensive candidate readiness evaluation and study roadmap"
+                      >
+                        <Sparkles size={14} style={{ color: 'var(--primary-600)' }} />
+                        <span>Full Report</span>
+                      </button>
 
-                        <button
-                          onClick={() => handleViewResult(sess)}
-                          disabled={loadingSessionDetail}
-                          className="btn btn-outline text-xs"
-                          style={{ padding: '0.5rem 0.85rem' }}
-                        >
-                          <Eye size={14} />
-                          <span>Quick View</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenRetakeModal(sess)}
-                          className="btn btn-outline text-xs"
-                          style={{ padding: '0.5rem 0.85rem' }}
-                        >
-                          <RotateCcw size={14} />
-                          <span>Retake</span>
-                        </button>
-                      </div>
+                      {/* Retake */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenRetakeModal(sess, e)}
+                        className="btn btn-outline text-xs flex items-center gap-1.5"
+                        style={{ padding: '0.55rem 0.85rem' }}
+                        title="Select a skill to retake technical assessment quiz"
+                      >
+                        <RotateCcw size={13} />
+                        <span>Retake Quiz</span>
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Card Bottom Helper Banner */}
+                  <div
+                    className="text-xs text-muted pt-2 flex items-center justify-between flex-wrap gap-2"
+                    style={{ borderTop: '1px dashed var(--border-color)', fontSize: '0.72rem' }}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Layers size={12} style={{ color: 'var(--primary-600)' }} />
+                      <span>Click card to open the <strong>CV & JD Skill Grid</strong>, re-attempt assessments, and update this final analysis.</span>
+                    </span>
+                    <span style={{ color: 'var(--primary-700)', fontWeight: 600 }}>
+                      View Skill Matrix & Assessment Hub →
+                    </span>
                   </div>
                 </div>
               );

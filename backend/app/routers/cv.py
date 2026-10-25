@@ -213,6 +213,11 @@ def get_past_analysis_sessions(
             "improvement_skills_count": improvement_skills_count,
             "assessment_status": assessment_status,
             "overall_readiness": overall_readiness,
+            "final_verdict": combined.get("final_verdict") or combined.get("readiness_verdict") or overall_readiness,
+            "readiness_verdict": combined.get("readiness_verdict") or combined.get("final_verdict") or overall_readiness,
+            "is_preliminary": combined.get("is_preliminary", True),
+            "recommendation_confidence": combined.get("recommendation_confidence"),
+            "assessed_skills_count": assessed_count,
             "status_badge": "Analysis Complete",
             "created_at": getattr(a, "created_at").isoformat() if getattr(a, "created_at", None) is not None else None
         })

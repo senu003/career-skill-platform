@@ -93,7 +93,7 @@ export default function DashboardPage() {
   // Sync session from URL if explicit analysis_id is provided
   useEffect(() => {
     let isCancelled = false;
-    if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
+    if (urlAnalysisId) {
       const fetchSession = async () => {
         try {
           const res = await fetchWithAuth(`/cv/sessions/${urlAnalysisId}`);
@@ -109,7 +109,7 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [urlAnalysisId, analysisResult?.analysis_id, setAnalysisResult]);
+  }, [urlAnalysisId, setAnalysisResult]);
 
   const isSkillAvailable = (skillName) => {
     return isSupportedSkill(skillName, supportedSkillsList);
