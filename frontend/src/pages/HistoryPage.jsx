@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, Briefcase, Plus, Upload, CheckCircle2, AlertCircle, ArrowRight,
-  RefreshCw, Calendar, X, Play, Layers, Check
+  RefreshCw, Calendar, X, Layers, Check
 } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
@@ -265,13 +265,13 @@ export default function HistoryPage() {
       />
 
       {/* 1. PAGE HEADER */}
-      <div className="flex justify-between items-start flex-wrap gap-4 mb-6">
+      <div className="flex justify-between items-center flex-wrap gap-4 mb-6">
         <div>
-          <h1 className="page-title mb-1" style={{ color: 'var(--text-main)', fontSize: '1.85rem' }}>
+          <h1 className="page-title mb-1" style={{ color: 'var(--text-main)', fontSize: '1.85rem', fontWeight: 800 }}>
             History
           </h1>
-          <p className="page-subtitle" style={{ color: 'var(--text-muted)' }}>
-            View your previous career analyses, retake assessments, and compare your latest results.
+          <p className="page-subtitle" style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>
+            View your previous career analyses and launch technical skill diagnostics.
           </p>
         </div>
 
@@ -281,19 +281,19 @@ export default function HistoryPage() {
             setShowNewAnalysisModal(true);
           }}
           className="btn btn-primary"
-          style={{ padding: '0.65rem 1.35rem', fontSize: '0.925rem' }}
+          style={{ padding: '0.65rem 1.35rem', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px' }}
         >
-          <Plus size={18} />
-          <span>+ New Analysis</span>
+          <Plus size={16} />
+          <span>New Analysis</span>
         </button>
       </div>
 
       {/* Success Banner for CV Upload */}
       {uploadSuccess && (
-        <div className="alert-success flex items-center justify-between mb-4">
+        <div className="alert-success flex items-center justify-between mb-4" style={{ borderRadius: '8px' }}>
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={18} />
-            <span>CV uploaded successfully! Made default resume for all future analyses.</span>
+            <CheckCircle2 size={16} />
+            <span>Resume updated successfully! Saved as default for future analyses.</span>
           </div>
           <button onClick={() => setUploadSuccess(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>
             <X size={16} />
@@ -301,80 +301,94 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {/* 2. LATEST CV MANAGEMENT SECTION */}
-      <div className="cv-compact-card">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <div className="cv-icon-box">
-              <FileText size={24} />
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <h2 className="font-bold text-base" style={{ color: 'var(--text-main)' }}>
-                  Your Latest CV
-                </h2>
-                {savedCv && (
-                  <span className="badge badge-success flex items-center gap-1">
-                    <CheckCircle2 size={12} />
-                    <span>Ready to use</span>
-                  </span>
-                )}
-              </div>
-
-              {savedCv ? (
-                <div className="text-xs text-muted flex items-center gap-3">
-                  <span className="font-semibold text-main" style={{ color: 'var(--text-main)' }}>{savedCv.file_name}</span>
-                  <span>•</span>
-                  <span>Uploaded {formatDate(savedCv.uploaded_at)}</span>
-                </div>
-              ) : (
-                <p className="text-xs text-muted">No saved resume found. Upload your CV to reuse it for analyses.</p>
-              )}
-            </div>
+      {/* 2. DEFAULT RESUME BAR */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          padding: '0.85rem 1.25rem',
+          background: '#ffffff',
+          border: '1px solid var(--border-color)',
+          borderRadius: '10px',
+          marginBottom: '2rem',
+          boxShadow: 'var(--shadow-sm)',
+        }}
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: '8px',
+              backgroundColor: 'var(--primary-50)',
+              color: 'var(--primary-600)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid var(--primary-100)',
+              flexShrink: 0,
+            }}
+          >
+            <FileText size={18} />
           </div>
 
-          {/* CV Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleUploadNewCvClick}
-              disabled={uploadingCv}
-              className="btn btn-outline text-xs"
-              style={{ padding: '0.5rem 0.9rem' }}
-            >
-              {uploadingCv ? (
-                <>
-                  <span className="spinner spinner-dark" style={{ width: 14, height: 14 }}></span>
-                  <span>Uploading...</span>
-                </>
-              ) : (
-                <>
-                  <Upload size={14} />
-                  <span>Upload New CV</span>
-                </>
-              )}
-            </button>
-
-            {savedCv && (
-              <button
-                onClick={() => {
-                  setNewAnalysisCvChoice('latest');
-                  setShowNewAnalysisModal(true);
-                }}
-                className="btn btn-secondary text-xs"
-                style={{ padding: '0.5rem 0.9rem' }}
-              >
-                <Play size={14} />
-                <span>Use This CV</span>
-              </button>
+          <div className="flex items-center gap-2.5 flex-wrap text-sm">
+            <span className="text-muted font-medium">Default Resume:</span>
+            {savedCv ? (
+              <>
+                <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                  {savedCv.file_name}
+                </strong>
+                <span className="text-muted text-xs">
+                  • Uploaded {formatDate(savedCv.uploaded_at)}
+                </span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    backgroundColor: '#ecfdf5',
+                    color: '#059669',
+                    border: '1px solid #a7f3d0',
+                  }}
+                >
+                  <CheckCircle2 size={12} />
+                  <span>Ready to Use</span>
+                </span>
+              </>
+            ) : (
+              <span className="text-muted italic text-xs">
+                No resume saved yet. Upload a CV to enable 1-click job match analysis.
+              </span>
             )}
           </div>
         </div>
 
-        {/* Small Explanation Text */}
-        <p className="text-xs text-muted mt-3 pt-2" style={{ borderTop: '1px solid var(--primary-200)', lineHeight: 1.4 }}>
-          You can upload your latest CV once and reuse it for future analyses. You don't need to upload it every time.
-        </p>
+        <button
+          onClick={handleUploadNewCvClick}
+          disabled={uploadingCv}
+          className="btn btn-outline text-xs flex items-center gap-1.5"
+          style={{ padding: '0.45rem 0.85rem', borderRadius: '6px' }}
+        >
+          {uploadingCv ? (
+            <>
+              <span className="spinner spinner-dark" style={{ width: 13, height: 13 }}></span>
+              <span>Uploading...</span>
+            </>
+          ) : (
+            <>
+              <Upload size={13} />
+              <span>{savedCv ? 'Change Resume' : 'Upload Resume'}</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* 3. PREVIOUS ANALYSES HISTORY LIST */}
