@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Upload, FileText, CheckCircle2, AlertCircle, AlertTriangle,
-  ArrowRight, RefreshCw, Briefcase, ChevronDown, ChevronUp,
-  Target, TrendingUp, Sparkles, HelpCircle
+  ArrowRight, RefreshCw, Briefcase,
+  TrendingUp, Sparkles
 } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
@@ -109,7 +109,7 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [urlAnalysisId, analysisResult?.analysis_id]);
+  }, [urlAnalysisId, analysisResult?.analysis_id, setAnalysisResult]);
 
   const isSkillAvailable = (skillName) => {
     return isSupportedSkill(skillName, supportedSkillsList);
@@ -389,7 +389,7 @@ export default function DashboardPage() {
   };
 
   // One-line explanation under each gap, aware of missing levels
-  const getGapExplanation = (item) => {
+  const _getGapExplanation = (item) => {
     const reqRaw = String(item.required_level || item.level || '').trim().toLowerCase();
     const reqStr = translateRequiredLevel(reqRaw);
     const importanceLabel = (item.importance || 'required').toLowerCase() === 'preferred' ? 'Nice-to-have' : 'Required';
@@ -427,8 +427,8 @@ export default function DashboardPage() {
   const requiredFoundCount = requiredSkills.filter(isMatchedSkill).length;
   const totalRequiredCount = requiredSkills.length;
 
-  const preferredFoundCount = preferredSkills.filter(isMatchedSkill).length;
-  const totalPreferredCount = preferredSkills.length;
+  const _preferredFoundCount = preferredSkills.filter(isMatchedSkill).length;
+  const _totalPreferredCount = preferredSkills.length;
 
   // Match percentage: Count Required skills only (Do not mix Preferred into the percentage)
   const matchPercentage = totalRequiredCount > 0
@@ -466,14 +466,14 @@ export default function DashboardPage() {
   };
 
   const readinessVerdict = analysisResult?.readiness_verdict || analysisResult?.final_verdict || 'Evaluation Complete';
-  const readinessReasons = analysisResult?.readiness_reasons || [];
-  const verdictTheme = getVerdictTheme(readinessVerdict);
+  const _readinessReasons = analysisResult?.readiness_reasons || [];
+  const _verdictTheme = getVerdictTheme(readinessVerdict);
 
   // Check if candidate has completed any assessment
-  const hasAnyAssessments = skillsList.some(s => s.assessed_level !== null && s.assessed_level !== undefined);
+  const _hasAnyAssessments = skillsList.some(s => s.assessed_level !== null && s.assessed_level !== undefined);
 
   // Focus First list (Gaps ONLY, max 5, ordered Required before Preferred, then largest gap first)
-  const focusFirstList = (() => {
+  const _focusFirstList = (() => {
     // If backend provided priority_skills, ensure all items are strictly gaps
     if (analysisResult?.priority_skills && Array.isArray(analysisResult.priority_skills) && analysisResult.priority_skills.length > 0) {
       const gapPriority = analysisResult.priority_skills.filter(p => isSkillGap(p));
@@ -543,7 +543,7 @@ export default function DashboardPage() {
   // Footer CTA: Show "Continue to Assessment" only if at least one gap has an available assessment
   const allGapSkills = skillsList.filter(isSkillGap);
   const firstGapWithAssessment = allGapSkills.find(s => isSkillAvailable(s.skill));
-  const showFooterCta = Boolean(firstGapWithAssessment);
+  const _showFooterCta = Boolean(firstGapWithAssessment);
 
   // Category counters
   const meetsCount = skillsList.filter(s => getGapTier(s) === 'meets' || getGapTier(s) === 'exceeds').length;

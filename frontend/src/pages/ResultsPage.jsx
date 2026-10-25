@@ -17,7 +17,7 @@ export default function ResultsPage() {
   const { skill, attemptId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { analysisResult, setAnalysisResult, updateSkillResult, refreshAnalysis } = useAssessment();
+  const { analysisResult, setAnalysisResult, updateSkillResult } = useAssessment();
 
   const queryAttemptId = searchParams.get('attempt_id') || searchParams.get('attemptId');
   const analysisId = searchParams.get('analysis_id') || analysisResult?.analysis_id;
@@ -54,9 +54,9 @@ export default function ResultsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [analysisResult]);
+  }, [analysisResult, setAnalysisResult]);
 
-  const fetchResult = async () => {
+  const fetchResult = React.useCallback(async () => {
     if (!rawSkill && !targetAttemptId) {
       setError('No skill or attempt specified.');
       setLoading(false);
@@ -86,11 +86,11 @@ export default function ResultsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [rawSkill, targetAttemptId, analysisId, updateSkillResult]);
 
   useEffect(() => {
     fetchResult();
-  }, [skill, targetAttemptId, analysisId]);
+  }, [fetchResult]);
 
   // Format Helper: Capitalize level text
   const formatLevel = (lvl) => {

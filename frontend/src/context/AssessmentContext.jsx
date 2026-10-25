@@ -8,7 +8,7 @@ export function AssessmentProvider({ children }) {
     try {
       const saved = localStorage.getItem('career_platform_analysis');
       return saved ? JSON.parse(saved) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   });
@@ -133,7 +133,7 @@ export function AssessmentProvider({ children }) {
                 if (prev) return prev;
                 try {
                   localStorage.setItem('career_platform_analysis', JSON.stringify(detailRes));
-                } catch (e) {}
+                } catch {}
                 return detailRes;
               });
             }
@@ -147,7 +147,7 @@ export function AssessmentProvider({ children }) {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [analysisResult]);
 
   return (
     <AssessmentContext.Provider value={{ analysisResult, setAnalysisResult, updateSkillResult, clearAnalysis, refreshAnalysis, isRefreshing }}>

@@ -18,6 +18,19 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: career-skill-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
   backend:
     build:
       context: ./backend
@@ -25,15 +38,26 @@ services:
     container_name: career-skill-backend
     ports:
       - "8000:8000"
+    command: sh -c "python scripts/run_migrations.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://myuser:mypassword@db:5432/career_skill_db}
       - JWT_SECRET=${JWT_SECRET:-career-skill-platform-super-secret-jwt-key-256bits-development-only}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - FRONTEND_ORIGINS=${FRONTEND_ORIGINS:-http://localhost,http://localhost:5173}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-10}
+      - MAX_CV_UPLOAD_SIZE_BYTES=${MAX_CV_UPLOAD_SIZE_BYTES:-10485760}
+      - RATE_LIMIT_REQUIREMENTS_ANALYZE=${RATE_LIMIT_REQUIREMENTS_ANALYZE:-10/minute}
+      - RATE_LIMIT_CV_ANALYZE=${RATE_LIMIT_CV_ANALYZE:-5/minute}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-local}
+      - UPLOAD_DIR=/app/uploads
+      - RUN_RUNTIME_DDL=0
     volumes:
       - backend_uploads:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - app-network

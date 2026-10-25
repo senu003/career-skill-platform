@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Clock, ArrowRight, AlertCircle, RefreshCw, CheckCircle, ArrowLeft } from 'lucide-react';
 import { fetchWithAuth } from '../api';
@@ -43,7 +43,7 @@ export default function AssessmentPage() {
   };
 
   // Determine required level from AssessmentContext or return 'unspecified'
-  const getRequiredLevel = () => {
+  const getRequiredLevel = useCallback(() => {
     if (!normalizedSkill) return null;
     const skillsList = analysisResult?.skills || [];
     const foundSkill = skillsList.find(
@@ -56,7 +56,7 @@ export default function AssessmentPage() {
       return cleanLvl;
     }
     return 'unspecified';
-  };
+  }, [normalizedSkill, analysisResult]);
 
   // Find next supported skill if current is unsupported, prioritizing identified weakness/missing skills first
   const getNextSupportedSkill = () => {
@@ -87,7 +87,7 @@ export default function AssessmentPage() {
   const nextSupportedSkill = getNextSupportedSkill();
 
   // Assessment Setup with specific target level (POST /assessment/start)
-  const startAssessmentWithLevel = async (targetLevel) => {
+  const startAssessmentWithLevel = useCallback(async (targetLevel) => {
     if (!normalizedSkill || !targetLevel) {
       setError('No skill or level selected for assessment.');
       setLoading(false);
@@ -125,7 +125,7 @@ export default function AssessmentPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [normalizedSkill, analysisId]);
 
   useEffect(() => {
     if (!normalizedSkill) {
@@ -143,7 +143,7 @@ export default function AssessmentPage() {
       setNeedsLevelSelection(true);
       setLoading(false);
     }
-  }, [skill, analysisId]);
+  }, [normalizedSkill, getRequiredLevel, startAssessmentWithLevel]);
 
   // Question Timer Interval (tracks time spent on current question in seconds)
   useEffect(() => {

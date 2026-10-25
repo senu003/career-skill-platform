@@ -63,17 +63,36 @@ class RealFlowLogger:
             token_snippet = h_copy["Authorization"][:20] + "...[TRUNCATED_JWT_TOKEN]"
             h_copy["Authorization"] = token_snippet
 
+        def sanitize_payload(payload):
+            if not isinstance(payload, dict):
+                return payload
+            clean = {}
+            for k, v in payload.items():
+                if k in ("password", "password_hash", "access_token"):
+                    clean[k] = "[REDACTED]"
+                elif isinstance(v, dict):
+                    clean[k] = sanitize_payload(v)
+                elif isinstance(v, list):
+                    clean[k] = [sanitize_payload(item) if isinstance(item, dict) else item for item in v]
+                else:
+                    clean[k] = v
+            return clean
+
+        clean_req_body = sanitize_payload(req_body)
+        clean_form_data = sanitize_payload(form_data)
+        clean_resp_body = sanitize_payload(resp_body)
+
         log_entry = {
             "step": step_num,
             "name": step_name,
             "method": method,
             "url": url,
             "headers": h_copy,
-            "req_body": req_body,
-            "form_data": form_data,
+            "req_body": clean_req_body,
+            "form_data": clean_form_data,
             "files": {k: v[0] if isinstance(v, tuple) else str(v) for k, v in files.items()} if files else None,
             "status_code": resp_status,
-            "resp_body": resp_body
+            "resp_body": clean_resp_body
         }
         self.logs.append(log_entry)
 
@@ -88,16 +107,16 @@ class RealFlowLogger:
             md.append(json.dumps(h_copy, indent=2))
             md.append("```\n")
 
-        if req_body is not None:
+        if clean_req_body is not None:
             md.append("**Request Body (JSON)**:")
             md.append("```json")
-            md.append(json.dumps(req_body, indent=2))
+            md.append(json.dumps(clean_req_body, indent=2))
             md.append("```\n")
 
-        if form_data is not None:
+        if clean_form_data is not None:
             md.append("**Request Form Data**:")
             md.append("```json")
-            md.append(json.dumps(form_data, indent=2))
+            md.append(json.dumps(clean_form_data, indent=2))
             md.append("```\n")
 
         if files is not None:
@@ -105,10 +124,10 @@ class RealFlowLogger:
             md.append(f"- **Filename**: `{files.get('file', ('unknown',))[0]}`")
             md.append(f"- **Content-Type**: `{files.get('file', ('', '', 'application/pdf'))[2]}`\n")
 
-        if resp_body is not None:
+        if clean_resp_body is not None:
             md.append("**Actual API Response Body (JSON)**:")
             md.append("```json")
-            md.append(json.dumps(resp_body, indent=2))
+            md.append(json.dumps(clean_resp_body, indent=2))
             md.append("```\n")
 
         self.report_markdown.append("\n".join(md))

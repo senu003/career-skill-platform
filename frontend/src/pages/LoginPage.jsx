@@ -75,13 +75,15 @@ const VIEW = {
 };
 
 export default function LoginPage() {
-  const [view, setView] = useState(VIEW.LOGIN);
+  const [searchParams] = useSearchParams();
+  const initialToken = searchParams.get('token') || '';
+  const [view, setView] = useState(initialToken ? VIEW.RESET : VIEW.LOGIN);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [resetToken, setResetToken] = useState('');
+  const [resetToken, setResetToken] = useState(initialToken);
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -90,16 +92,6 @@ export default function LoginPage() {
 
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // Auto-fill reset token from URL (?token=xxx)
-  useEffect(() => {
-    const urlToken = searchParams.get('token');
-    if (urlToken) {
-      setResetToken(urlToken);
-      setView(VIEW.RESET);
-    }
-  }, [searchParams]);
 
   // Redirect if already authenticated
   useEffect(() => {

@@ -25,46 +25,56 @@ from .routers.assessment import router as assessment_router
 from .routers.ml import router as ml_router
 from .routers.aggregation import router as aggregation_router
 
-# Ensure tables exist (creates new tables: password_reset_tokens, security_audit_logs)
-Base.metadata.create_all(bind=engine)
+# Schema initialization:
+# In production, migrations must be executed explicitly via Alembic before starting application workers.
+# RUN_RUNTIME_DDL is disabled by default (0) to eliminate concurrent DDL lock contention.
+RUN_RUNTIME_DDL = os.getenv("RUN_RUNTIME_DDL", "0").lower() in ("1", "true", "yes")
 
-# Safe column migration: add missing columns without breaking existing schema.
-_COLUMN_MIGRATIONS = [
-    # Legacy question/answer columns
-    "ALTER TABLE assessment_questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(50) DEFAULT 'MCQ'",
-    "ALTER TABLE assessment_answers ADD COLUMN IF NOT EXISTS time_taken NUMERIC(8, 2)",
-    "ALTER TABLE assessment_attempts ADD COLUMN IF NOT EXISTS analysis_id INTEGER REFERENCES analyses(id) ON DELETE SET NULL",
-    # New user profile / OAuth columns
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(50)",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_id VARCHAR(255)",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()",
-    # Make password_hash nullable (OAuth users have no password)
-    "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
-]
+if RUN_RUNTIME_DDL:
+    logger.info("RUN_RUNTIME_DDL enabled — executing fallback DDL checks...")
+    Base.metadata.create_all(bind=engine)
 
-try:
-    with engine.connect() as conn:
-        for ddl in _COLUMN_MIGRATIONS:
-            try:
-                conn.execute(text(ddl))
-            except Exception as col_err:
-                logger.debug(f"Column migration skipped (likely already applied): {col_err}")
-        conn.commit()
-except Exception as migrate_err:
-    logger.warning(f"Schema migration step failed — continuing: {migrate_err}")
+    _COLUMN_MIGRATIONS = [
+        "ALTER TABLE assessment_questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(50) DEFAULT 'MCQ'",
+        "ALTER TABLE assessment_answers ADD COLUMN IF NOT EXISTS time_taken NUMERIC(8, 2)",
+        "ALTER TABLE assessment_attempts ADD COLUMN IF NOT EXISTS analysis_id INTEGER REFERENCES analyses(id) ON DELETE SET NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(50)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_id VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()",
+        "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
+    ]
 
-with SessionLocal() as db_session:
-    seed_assessment_questions(db_session)
+    try:
+        with engine.connect() as conn:
+            for ddl in _COLUMN_MIGRATIONS:
+                try:
+                    conn.execute(text(ddl))
+                except Exception as col_err:
+                    logger.debug(f"Column migration skipped (likely already applied): {col_err}")
+            conn.commit()
+    except Exception as migrate_err:
+        logger.warning(f"Schema migration step failed — continuing: {migrate_err}")
+else:
+    logger.info("RUN_RUNTIME_DDL is disabled — schema managed by external Alembic migrations.")
+
+SEED_ON_STARTUP = os.getenv("SEED_ON_STARTUP", "0").lower() in ("1", "true", "yes")
+if SEED_ON_STARTUP:
+    with SessionLocal() as db_session:
+        seed_assessment_questions(db_session)
 
 from fastapi.middleware.cors import CORSMiddleware
+from app.rate_limiter import limiter, RateLimitExceeded, SlowAPIMiddleware
 
 app = FastAPI(
     title="Career Skill Intelligence Platform",
     description="AI-powered career & skill gap analysis platform",
     version="2.0.0",
 )
+
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 
 frontend_origins_str = os.getenv("FRONTEND_ORIGINS", "")
 frontend_origins = [origin.strip() for origin in frontend_origins_str.split(",") if origin.strip()]
@@ -83,6 +93,16 @@ def health_check():
     return {"status": "ok", "version": "2.0.0"}
 
 
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    retry_after = getattr(exc, "retry_after", 60)
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}. Please slow down your requests."},
+        headers={"Retry-After": str(retry_after)}
+    )
+
+
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.error(f"Database error: {exc}")
@@ -91,7 +111,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    if isinstance(exc, HTTPException):
+    if isinstance(exc, (HTTPException, RateLimitExceeded)):
         raise exc
     logger.error(f"Unexpected error: {exc}")
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})

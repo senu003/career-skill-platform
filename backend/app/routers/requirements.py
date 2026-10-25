@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..services.requirement_service import extract_requirements
-
+from ..rate_limiter import limiter, RATE_LIMIT_REQUIREMENTS_ANALYZE
 
 router = APIRouter()
 
@@ -12,15 +12,15 @@ class RequirementRequest(BaseModel):
 
 
 @router.post("/requirements/analyze")
-def analyze_requirements(request: RequirementRequest):
-
-    if not request.text.strip():
+@limiter.limit(RATE_LIMIT_REQUIREMENTS_ANALYZE)
+def analyze_requirements(request: Request, payload: RequirementRequest):
+    if not payload.text.strip():
         raise HTTPException(
             status_code=400,
             detail="Requirement text cannot be empty"
         )
 
-    result = extract_requirements(request.text)
+    result = extract_requirements(payload.text)
 
     if isinstance(result, dict):
         req_list = result.get("requirements", [])
@@ -30,6 +30,6 @@ def analyze_requirements(request: RequirementRequest):
         req_list = []
 
     return {
-        "input": request.text,
+        "input": payload.text,
         "requirements": req_list
     }

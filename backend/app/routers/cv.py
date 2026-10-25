@@ -2,7 +2,7 @@ import json
 import os
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -14,6 +14,8 @@ from app.services.skill_analysis_service import combine_cv_and_assessment
 from app.schemas.cv import CVAnalyzeResponseSchema
 from app.auth_deps import get_current_user, get_current_user_required, User
 from app.models import CV, Job, Analysis
+from app.rate_limiter import limiter, RATE_LIMIT_CV_ANALYZE
+from app.services.storage_service import get_storage_backend
 
 
 router = APIRouter()
@@ -312,7 +314,7 @@ async def upload_cv(
     Processes an uploaded CV PDF file and returns extracted text and metadata.
     Persists CV record for authenticated users.
     """
-    cv_data = await process_cv(file)
+    cv_data = await process_cv(file, user_id=current_user.id)
     cv_record = CV(
         user_id=current_user.id,
         file_name=cv_data.get("filename", "Uploaded_Resume.pdf"),
@@ -326,17 +328,22 @@ async def upload_cv(
     except Exception:
         db.rollback()
         file_path = cv_data.get("file_path")
-        if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass
+        if file_path:
+            storage = get_storage_backend()
+            storage.delete_file(file_path)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
         raise HTTPException(status_code=500, detail="Failed to save CV record")
     return cv_data
 
 
 @router.post("/cv/analyze", response_model=CVAnalyzeResponseSchema)
+@limiter.limit(RATE_LIMIT_CV_ANALYZE)
 async def analyze_cv(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     requirements: str = Form(...),
     cv_id: Optional[int] = Form(None),
@@ -372,7 +379,7 @@ async def analyze_cv(
 
     # 2. Extract CV text: either from uploaded file OR from saved CV record
     if file and file.filename:
-        cv_data = await process_cv(file)
+        cv_data = await process_cv(file, user_id=effective_user_id)
         if user_exists:
             cv_record = CV(
                 user_id=effective_user_id,
@@ -385,19 +392,25 @@ async def analyze_cv(
                 db.refresh(cv_record)
             except Exception:
                 db.rollback()
-                if cv_data.get("file_path") and os.path.exists(cv_data["file_path"]):
+                if cv_data.get("file_path"):
+                    storage = get_storage_backend()
+                    storage.delete_file(cv_data["file_path"])
+                    if os.path.exists(cv_data["file_path"]):
+                        try:
+                            os.remove(cv_data["file_path"])
+                        except OSError:
+                            pass
+                raise HTTPException(status_code=500, detail="Failed to save CV record")
+        else:
+            # Clean up temporary uploaded file for unauthenticated users
+            if cv_data.get("file_path"):
+                storage = get_storage_backend()
+                storage.delete_file(cv_data["file_path"])
+                if os.path.exists(cv_data["file_path"]):
                     try:
                         os.remove(cv_data["file_path"])
                     except OSError:
                         pass
-                raise HTTPException(status_code=500, detail="Failed to save CV record")
-        else:
-            # Clean up temporary uploaded file for unauthenticated users
-            if cv_data.get("file_path") and os.path.exists(cv_data["file_path"]):
-                try:
-                    os.remove(cv_data["file_path"])
-                except OSError:
-                    pass
     else:
         # Search for saved CV by cv_id or latest for effective_user_id
         if cv_id:

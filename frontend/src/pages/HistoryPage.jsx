@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, Briefcase, Plus, Upload, CheckCircle2, AlertCircle, ArrowRight,
-  RefreshCw, Eye, RotateCcw, Sparkles, Building, Calendar, Layers, ShieldCheck,
-  TrendingUp, X, Check, Award, BookOpen, AlertTriangle, Play
+  RefreshCw, Eye, RotateCcw, Sparkles, Calendar,
+  X, Check, Play
 } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
@@ -160,7 +160,7 @@ export default function HistoryPage() {
       if (res) {
         setAnalysisResult(res);
       }
-    } catch (err) {}
+    } catch {}
     navigate(`/recommendation?analysis_id=${session.analysis_id}`);
   };
 

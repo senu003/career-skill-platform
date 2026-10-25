@@ -47,7 +47,7 @@ function FeedbackItem({ item }) {
       setCopied(true);
       setCopyFailed(false);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
+    } catch {
       setCopyFailed(true);
       setTimeout(() => setCopyFailed(false), 2000);
     }
