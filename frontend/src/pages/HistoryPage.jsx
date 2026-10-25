@@ -2,12 +2,10 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, Briefcase, Plus, Upload, CheckCircle2, AlertCircle, ArrowRight,
-  RefreshCw, RotateCcw, Sparkles, Calendar,
-  X, Play, Layers, Check
+  RefreshCw, Calendar, X, Play, Layers, Check
 } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
-import { isSupportedSkill } from '../utils/supportedSkills';
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -26,7 +24,6 @@ export default function HistoryPage() {
 
   // Modal States
   const [showNewAnalysisModal, setShowNewAnalysisModal] = useState(false);
-  const [selectedSessionForRetake, setSelectedSessionForRetake] = useState(null);
 
   // New Analysis Intake Form State
   const [newAnalysisCvChoice, setNewAnalysisCvChoice] = useState('latest'); // 'latest' | 'new'
@@ -85,14 +82,7 @@ export default function HistoryPage() {
     });
   };
 
-  // Helper for Readiness badge styling
-  const getReadinessBadgeClass = (lvl) => {
-    const clean = (lvl || '').toLowerCase();
-    if (clean.includes('advanced') || clean.includes('interview') || clean.includes('ready')) return 'readiness-badge-advanced';
-    if (clean.includes('intermediate') || clean.includes('short-term') || clean.includes('prep')) return 'readiness-badge-intermediate';
-    if (clean.includes('basic') || clean.includes('major') || clean.includes('upskill')) return 'readiness-badge-basic';
-    return 'readiness-badge-foundational';
-  };
+
 
   // Handle Direct Uploading of a New Default CV from Latest CV Card
   const handleUploadNewCvClick = () => {
@@ -151,33 +141,7 @@ export default function HistoryPage() {
   };
 
 
-  // Action Handler: Directly Navigate to Full Report for a Historical Session
-  const handleOpenReport = async (session, e) => {
-    if (e) e.stopPropagation();
-    try {
-      const res = await fetchWithAuth(`/cv/sessions/${session.analysis_id}`);
-      if (res) {
-        setAnalysisResult(res);
-      }
-    } catch (err) {
-      console.warn('Session report fetch error:', err);
-    }
-    navigate(`/recommendation?analysis_id=${session.analysis_id}`);
-  };
 
-  // Action Handler: Open Retake Assessment Modal for a Session
-  const handleOpenRetakeModal = (session, e) => {
-    if (e) e.stopPropagation();
-    setSelectedSessionForRetake(session);
-  };
-
-  // Action Handler: Launch Technical MCQ Assessment for a Specific Skill
-  const handleLaunchSkillAssessment = (skillName) => {
-    const analysisId = selectedSessionForRetake?.analysis_id;
-    setSelectedSessionForRetake(null);
-    const path = `/assessment/${encodeURIComponent(skillName)}`;
-    navigate(analysisId ? `${path}?analysis_id=${encodeURIComponent(analysisId)}` : path);
-  };
 
   // Action Handler: Run New Analysis Intake
   const handleStartNewAnalysis = async (e) => {
@@ -462,15 +426,6 @@ export default function HistoryPage() {
           /* PAST SESSIONS CARDS (DATE-BASED) */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
             {sortedSessions.map((sess) => {
-              const scoreVal = sess.overall_score !== null && sess.overall_score !== undefined ? Math.round(sess.overall_score) : 0;
-              const verdictText = sess.readiness_verdict || sess.final_verdict || sess.overall_readiness || 'Analysis Complete';
-              const readinessBadgeClass = getReadinessBadgeClass(verdictText);
-              const assessedCount = sess.assessed_skills_count !== undefined
-                ? sess.assessed_skills_count
-                : (sess.skills?.filter(s => s.assessed_level !== null && s.assessed_level !== undefined).length || 0);
-              const totalSkills = sess.total_skills_count || sess.parsed_skills?.length || sess.skills?.length || 0;
-              const isPrelim = Boolean(sess.is_preliminary ?? (assessedCount === 0));
-
               return (
                 <div
                   key={sess.analysis_id}
@@ -478,10 +433,16 @@ export default function HistoryPage() {
                   className="history-session-card"
                   style={{
                     cursor: 'pointer',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '1.25rem',
+                    padding: '1.25rem 1.75rem',
+                    borderRadius: '12px',
                     border: '1px solid var(--border-color)',
-                    padding: '1.5rem',
-                    marginBottom: '0.25rem',
+                    backgroundColor: '#ffffff',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                   }}
                   role="button"
                   tabIndex={0}
@@ -492,154 +453,47 @@ export default function HistoryPage() {
                     }
                   }}
                 >
-                  {/* Top Bar: Title, Company, Session ID, Date & Persistence Indicator */}
-                  <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  {/* Left: Job Analysis Identification */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', flex: '1 1 320px' }}>
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <h3 className="font-bold text-lg text-main flex items-center gap-2" style={{ margin: 0 }}>
                         <Briefcase size={18} style={{ color: 'var(--primary-600)' }} />
                         <span>{sess.job_title || 'Target Job Position'}</span>
                       </h3>
                       {sess.company && (
-                        <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>
+                        <span className="badge badge-purple" style={{ fontSize: '0.75rem', padding: '0.2rem 0.65rem' }}>
                           {sess.company}
                         </span>
                       )}
-                      <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.68rem', border: '1px solid #cbd5e1' }}>
-                        Session #{sess.analysis_id}
-                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="text-xs text-muted flex items-center gap-1.5" style={{ backgroundColor: '#f8fafc', padding: '0.25rem 0.65rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                    {/* Identifying Details: Date & Resume Used */}
+                    <div className="flex items-center gap-4 text-xs text-muted flex-wrap">
+                      <span className="flex items-center gap-1.5">
                         <Calendar size={13} style={{ color: 'var(--primary-600)' }} />
                         <span>Analyzed {formatDate(sess.created_at)}</span>
-                      </div>
-                      <span
-                        className="badge"
-                        style={{
-                          backgroundColor: '#ecfdf5',
-                          color: '#059669',
-                          border: '1px solid #a7f3d0',
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.25rem',
-                        }}
-                        title="Stored final analysis version. Retaking quizzes will automatically update this record."
-                      >
-                        <CheckCircle2 size={12} />
-                        <span>Stored Final Version</span>
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1.5">
+                        <FileText size={13} style={{ color: 'var(--primary-600)' }} />
+                        <span>Resume: <strong style={{ color: 'var(--text-main)' }}>{sess.cv_filename || 'Uploaded Resume'}</strong></span>
                       </span>
                     </div>
                   </div>
 
-                  {/* Main Metrics & Content Row */}
-                  <div className="flex justify-between items-center flex-wrap gap-4 mb-3">
-                    <div className="flex items-center gap-4 flex-wrap" style={{ flex: '1 1 340px' }}>
-                      {/* Overall Match Score Pill */}
-                      <div className="session-score-pill">
-                        <span className="text-xs text-muted font-semibold uppercase tracking-wider" style={{ fontSize: '0.62rem' }}>
-                          Overall Match
-                        </span>
-                        <div className="session-score-value mt-0.5">
-                          {scoreVal}%
-                        </div>
-                      </div>
-
-                      {/* Status Badges & Progress */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                          <span className={`readiness-badge ${readinessBadgeClass}`}>
-                            {verdictText}
-                          </span>
-
-                          {isPrelim ? (
-                            <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', fontSize: '0.68rem', fontWeight: 600 }}>
-                              Preliminary (Quizzes Pending)
-                            </span>
-                          ) : (
-                            <span className="badge" style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 600 }}>
-                              ✓ Quizzes Completed
-                            </span>
-                          )}
-
-                          <span className="text-xs text-muted font-medium">
-                            {assessedCount} of {totalSkills} Quizzes Taken
-                          </span>
-                        </div>
-
-                        {/* Resume & Skill Breakdown Row */}
-                        <div className="text-xs text-muted flex items-center gap-3 flex-wrap">
-                          <span className="flex items-center gap-1">
-                            <FileText size={12} style={{ color: 'var(--primary-600)' }} />
-                            <span>Resume: <strong>{sess.cv_filename || 'Uploaded Resume'}</strong></span>
-                          </span>
-                          <span>•</span>
-                          <span className="text-emerald-700 font-semibold">
-                            {sess.matched_skills_count || 0} Matched
-                          </span>
-                          <span>•</span>
-                          <span style={{ color: (sess.improvement_skills_count || 0) > 0 ? '#b91c1c' : 'var(--text-muted)' }}>
-                            {sess.improvement_skills_count || 0} Skill Gaps
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                      {/* Primary CTA: Open Diagnostic Grid */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenDiagnosticGrid(sess, e)}
-                        className="btn btn-primary text-xs flex items-center gap-1.5"
-                        style={{ padding: '0.55rem 1.05rem', fontWeight: 600 }}
-                        title="Open the CV vs JD skill comparison grid to review skills and take quizzes"
-                      >
-                        <Layers size={14} />
-                        <span>Open Diagnostic Grid</span>
-                        <ArrowRight size={13} />
-                      </button>
-
-                      {/* Full Report */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenReport(sess, e)}
-                        className="btn btn-outline text-xs flex items-center gap-1.5"
-                        style={{ padding: '0.55rem 0.9rem' }}
-                        title="View comprehensive candidate readiness evaluation and study roadmap"
-                      >
-                        <Sparkles size={14} style={{ color: 'var(--primary-600)' }} />
-                        <span>Full Report</span>
-                      </button>
-
-                      {/* Retake */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenRetakeModal(sess, e)}
-                        className="btn btn-outline text-xs flex items-center gap-1.5"
-                        style={{ padding: '0.55rem 0.85rem' }}
-                        title="Select a skill to retake technical assessment quiz"
-                      >
-                        <RotateCcw size={13} />
-                        <span>Retake Quiz</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Card Bottom Helper Banner */}
-                  <div
-                    className="text-xs text-muted pt-2 flex items-center justify-between flex-wrap gap-2"
-                    style={{ borderTop: '1px dashed var(--border-color)', fontSize: '0.72rem' }}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Layers size={12} style={{ color: 'var(--primary-600)' }} />
-                      <span>Click card to open the <strong>CV & JD Skill Grid</strong>, re-attempt assessments, and update this final analysis.</span>
-                    </span>
-                    <span style={{ color: 'var(--primary-700)', fontWeight: 600 }}>
-                      View Skill Matrix & Assessment Hub →
-                    </span>
+                  {/* Right: Open Diagnostic Grid CTA */}
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenDiagnosticGrid(sess, e)}
+                      className="btn btn-primary text-xs flex items-center gap-2"
+                      style={{ padding: '0.65rem 1.25rem', fontWeight: 600, borderRadius: '8px' }}
+                      title="Open the CV vs JD skill comparison grid"
+                    >
+                      <Layers size={14} />
+                      <span>Open Diagnostic Grid</span>
+                      <ArrowRight size={13} />
+                    </button>
                   </div>
                 </div>
               );
@@ -649,83 +503,7 @@ export default function HistoryPage() {
       </div>
 
 
-      {/* 5. RETAKE ASSESSMENT MODAL */}
-      {selectedSessionForRetake && (
-        <div className="modal-overlay" onClick={() => setSelectedSessionForRetake(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
-            <div className="flex items-center justify-between mb-4 border-b pb-3" style={{ borderColor: 'var(--border-color)' }}>
-              <div>
-                <h2 className="font-bold text-lg text-main flex items-center gap-2" style={{ margin: 0 }}>
-                  <RotateCcw size={18} style={{ color: 'var(--primary-600)' }} />
-                  <span>Retake Skill Assessment</span>
-                </h2>
-                <p className="text-xs text-muted mt-0.5">
-                  Redo assessments for skills in {selectedSessionForRetake.job_title}. Original history will be preserved.
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedSessionForRetake(null)}
-                className="btn btn-outline"
-                style={{ padding: '0.35rem', borderRadius: '50%', width: 32, height: 32 }}
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            {/* Skills Available to Retake */}
-            <div className="mb-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted mb-2">
-                Job Requirements & Technical Assessment Status
-              </h3>
-
-              <div className="flex flex-col gap-2">
-                {(selectedSessionForRetake.skills || selectedSessionForRetake.parsed_skills || []).map((skItem, idx) => {
-                  const skillName = typeof skItem === 'string' ? skItem : skItem.skill;
-                  const supported = isSupportedSkill(skillName);
-                  const reqLvl = typeof skItem === 'object' ? (skItem.required_level || skItem.level) : 'Intermediate';
-                  const isAssessed = typeof skItem === 'object' && skItem.assessed_level;
-
-                  return (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 rounded"
-                      style={{
-                        backgroundColor: supported ? 'var(--primary-50)' : '#f8fafc',
-                        border: supported ? '1px solid var(--primary-200)' : '1px solid var(--border-color)',
-                      }}
-                    >
-                      <div>
-                        <div className="font-semibold text-sm text-main flex items-center gap-2">
-                          <span>{skillName}</span>
-                          <span className="text-xs text-muted font-normal" style={{ fontSize: '0.7rem' }}>
-                            ({isAssessed ? `Assessed: ${isAssessed}` : 'Not assessed yet'})
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted">Required Level: {reqLvl}</div>
-                      </div>
-
-                      <button
-                        onClick={() => handleLaunchSkillAssessment(skillName)}
-                        className="btn btn-primary text-xs flex items-center gap-1.5"
-                        style={{ padding: '0.35rem 0.75rem' }}
-                      >
-                        <Play size={13} />
-                        <span>Take assessment</span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button onClick={() => setSelectedSessionForRetake(null)} className="btn btn-outline text-xs">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 6. NEW ANALYSIS / CV REUSE MODAL */}
       {showNewAnalysisModal && (
