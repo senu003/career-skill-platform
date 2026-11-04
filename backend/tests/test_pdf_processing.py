@@ -65,7 +65,16 @@ class TestPdfProcessing(unittest.TestCase):
         self.assertIn("Python", res["text"])
         self.assertIn("Docker", res["text"])
         self.assertGreaterEqual(res["parse_quality_score"], 0.4)
-        self.assertIn(res["parsing_method"], ["pymupdf", "pdfplumber"])
+        self.assertIn(res["parsing_method"], ["pymupdf", "pypdf", "pdfplumber"])
+
+    def test_pypdf_fallback_when_pymupdf_fails(self):
+        """When pymupdf fails, pypdf seamlessly extracts text."""
+        text = "Jane Doe\nSenior Backend Engineer skilled in Python, FastAPI, and PostgreSQL."
+        pdf_path = self._create_text_pdf(text)
+        with patch("app.services.pdf_service._extract_pymupdf", return_value=""):
+            res = extract_pdf_text(pdf_path)
+            self.assertEqual(res["parsing_method"], "pypdf")
+            self.assertIn("FastAPI", res["text"])
 
     def test_short_cv_rejected_when_real_words_under_50_characters(self):
         """Short text with less than 50 characters of real words is rejected as insufficient/garbled."""

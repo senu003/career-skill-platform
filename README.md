@@ -227,9 +227,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- **Frontend**: http://localhost:5173
-- **Backend API Docs**: http://localhost:8000/docs
+- **Frontend (Application Entrypoint)**: http://localhost (or custom `FRONTEND_PORT`)
+- **Backend API Docs (Swagger UI)**: http://localhost:8000/docs (or http://localhost/docs via reverse proxy)
 - **PostgreSQL**: `localhost:5432`
+- **Redis**: `localhost:6379`
 
 ---
 

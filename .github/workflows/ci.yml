@@ -7,26 +7,42 @@ on:
     branches: [ "main" ]
 
 jobs:
-  backend-tests:
+  backend-verification:
+    name: Backend Test Suite & Migrations
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: career_skill_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: career_skill_test_db
         ports:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 5s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/career_skill_db
-      JWT_SECRET: ci-test-secret-key-256bits-min-length-required
+      DATABASE_URL: postgresql://test_user:test_password@localhost:5432/career_skill_test_db
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-test-secret-key-256bits-min-length-required-for-hs256
       GEMINI_API_KEY: dummy-api-key-for-ci
+      GEMINI_MOCK: "1"
+      STORAGE_BACKEND: local
+      RUN_RUNTIME_DDL: "0"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,14 +56,21 @@ jobs:
       - name: Install backend dependencies
         run: |
           cd backend
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run backend tests
+      - name: Verify Alembic fresh database upgrade to head
         run: |
           cd backend
-          pytest
+          python scripts/run_migrations.py
 
-  frontend-build:
+      - name: Run backend automated test suite
+        run: |
+          cd backend
+          pytest tests -v --tb=short
+
+  frontend-verification:
+    name: Frontend Lint & Production Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -60,22 +83,34 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
+      - name: Install locked frontend dependencies
         run: |
           cd frontend
           npm ci
+
+      - name: Run frontend lint
+        run: |
+          cd frontend
+          npm run lint
 
       - name: Run frontend production build
         run: |
           cd frontend
           npm run build
 
-  docker-build:
-    needs: [backend-tests, frontend-build]
+  docker-verification:
+    name: Docker Images Build & Compose Validation
+    needs: [backend-verification, frontend-verification]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Docker images
-        run: docker compose build
+      - name: Validate Docker Compose configuration
+        run: docker compose config
+
+      - name: Build backend Docker image
+        run: docker build -t career-skill-backend:ci ./backend
+
+      - name: Build frontend Docker image
+        run: docker build -t career-skill-frontend:ci ./frontend

@@ -63,6 +63,23 @@ def _extract_pymupdf(file_path: str) -> str:
         return ""
 
 
+def _extract_pypdf(file_path: str) -> str:
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(file_path)
+        if len(reader.pages) == 0:
+            return ""
+        text = ""
+        for page in reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n\n"
+        return text.strip()
+    except Exception as e:
+        logger.debug(f"pypdf extract failed: {e}")
+        return ""
+
+
 def _extract_pdfplumber(file_path: str) -> str:
     try:
         import pdfplumber
@@ -103,8 +120,9 @@ def extract_pdf_text(file_path: str) -> dict:
     """
     Extracts text from all pages of a PDF file using multiple methods:
     1. PyMuPDF (fitz)
-    2. pdfplumber
-    3. OCR fallback (pdf2image + pytesseract)
+    2. pypdf
+    3. pdfplumber
+    4. OCR fallback (pdf2image + pytesseract)
 
     Returns dictionary with text, parsing_method, and parse_quality_score.
     Raises HTTPException(400) if no usable text can be extracted.
@@ -115,6 +133,7 @@ def extract_pdf_text(file_path: str) -> dict:
 
     methods = [
         ("pymupdf", _extract_pymupdf),
+        ("pypdf", _extract_pypdf),
         ("pdfplumber", _extract_pdfplumber),
         ("ocr", _extract_ocr)
     ]

@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
-    container_name: career-skill-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-career_skill_db}
       POSTGRES_USER: ${POSTGRES_USER:-myuser}
@@ -20,9 +18,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: career-skill-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -35,16 +33,20 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: career-skill-backend
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     command: sh -c "python scripts/run_migrations.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://myuser:mypassword@db:5432/career_skill_db}
+      - DATABASE_URL=${COMPOSE_DATABASE_URL:-postgresql://${POSTGRES_USER:-myuser}:${POSTGRES_PASSWORD:-mypassword}@db:5432/${POSTGRES_DB:-career_skill_db}}
       - JWT_SECRET=${JWT_SECRET:-career-skill-platform-super-secret-jwt-key-256bits-development-only}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - FRONTEND_ORIGINS=${FRONTEND_ORIGINS:-http://localhost,http://localhost:5173}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MOCK=${GEMINI_MOCK:-0}
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.1-8b-instant}
+      - FRONTEND_ORIGINS=${COMPOSE_FRONTEND_ORIGINS:-http://localhost,http://localhost:80,http://localhost:5173,http://localhost:8000}
+      - REDIS_URL=${COMPOSE_REDIS_URL:-redis://redis:6379/0}
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-10}
       - MAX_CV_UPLOAD_SIZE_BYTES=${MAX_CV_UPLOAD_SIZE_BYTES:-10485760}
       - RATE_LIMIT_REQUIREMENTS_ANALYZE=${RATE_LIMIT_REQUIREMENTS_ANALYZE:-10/minute}
@@ -59,6 +61,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       - app-network
 
@@ -67,12 +75,18 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000}
-    container_name: career-skill-frontend
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-}
+    restart: unless-stopped
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - app-network
 
