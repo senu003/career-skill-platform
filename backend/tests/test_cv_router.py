@@ -300,6 +300,62 @@ class TestCVAnalyzeEndpoint(unittest.TestCase):
         self.assertIsNone(res.json()["skills"][0]["actionable_feedback"])
         mock_eval.assert_not_called()
 
+    def test_get_all_cvs_and_manage(self):
+        import uuid
+        from app.database import SessionLocal
+        from app.models import CV
+
+        uid = str(uuid.uuid4())[:8]
+        res = client.post("/users", json={"name": "Multi CV User", "email": f"multicv_{uid}@example.com", "password": "pwd"})
+        user_id = res.json()["id"]
+        login_res = client.post("/login", data={"username": f"multicv_{uid}@example.com", "password": "pwd"})
+        token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. No CVs yet
+        res = client.get("/cv/all", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.json()["has_cv"])
+        self.assertEqual(res.json()["cvs"], [])
+
+        # 2. Add two CVs
+        db = SessionLocal()
+        try:
+            cv1 = CV(user_id=user_id, file_name="resume_1.pdf", file_path="uploads/fake1.pdf")
+            cv2 = CV(user_id=user_id, file_name="resume_2.pdf", file_path="uploads/fake2.pdf")
+            db.add_all([cv1, cv2])
+            db.commit()
+            cv1_id = cv1.id
+            cv2_id = cv2.id
+        finally:
+            db.close()
+
+        # 3. Retrieve all CVs
+        res = client.get("/cv/all", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["has_cv"])
+        self.assertEqual(data["count"], 2)
+        filenames = [c["file_name"] for c in data["cvs"]]
+        self.assertIn("resume_1.pdf", filenames)
+        self.assertIn("resume_2.pdf", filenames)
+
+        # 4. Set cv1 as default
+        res = client.post(f"/cv/{cv1_id}/set-default", headers=headers)
+        self.assertEqual(res.status_code, 200)
+
+        # Verify cv1 is now latest/default
+        res = client.get("/cv/all", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()["cvs"][0]["id"] == cv1_id)
+        self.assertTrue(res.json()["cvs"][0]["is_default"])
+
+        # 5. Delete an unlinked CV
+        with patch("app.routers.cv.get_storage_backend") as mock_storage:
+            mock_storage.return_value.delete_file.return_value = True
+            del_res = client.delete(f"/cv/{cv2_id}", headers=headers)
+            self.assertEqual(del_res.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

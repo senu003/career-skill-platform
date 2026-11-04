@@ -20,3 +20,12 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def get_db():
+    """FastAPI dependency that yields a SQLAlchemy database session and ensures cleanup."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

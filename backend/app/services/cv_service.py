@@ -1,11 +1,14 @@
 import os
+import json
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from fastapi import UploadFile, HTTPException
+from sqlalchemy.orm import Session
 
 from .pdf_service import extract_pdf_text
 from .storage_service import get_storage_backend
+
 
 logger = logging.getLogger(__name__)
 
@@ -141,3 +144,250 @@ async def process_cv(
         "parsing_method": pdf_data.get("parsing_method", "unknown"),
         "parse_quality_score": pdf_data.get("parse_quality_score", 0.0)
     }
+
+
+def parse_and_validate_requirements(requirements_str: str) -> List[Dict[str, Any]]:
+    """
+    Parses and validates the JSON string containing skill requirements.
+    Enforces required structure: non-empty list of dicts with 'skill', 'level', 'importance'.
+    """
+    if not requirements_str or not requirements_str.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements string cannot be empty."
+        )
+
+    try:
+        data = json.loads(requirements_str)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid requirements JSON format."
+        )
+
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements JSON must be a list."
+        )
+
+    if len(data) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Requirements list cannot be empty."
+        )
+
+    for idx, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Requirement item at index {idx} must be an object."
+            )
+
+        if "skill" not in item or not isinstance(item["skill"], str) or not item["skill"].strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Requirement item at index {idx} missing 'skill'."
+            )
+
+        if "level" not in item or not isinstance(item["level"], str) or not item["level"].strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Requirement item at index {idx} missing 'level'."
+            )
+
+        if "importance" not in item or not isinstance(item["importance"], str) or not item["importance"].strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Requirement item at index {idx} missing 'importance'."
+            )
+
+    return data
+
+
+def get_candidate_sessions(db: Session, user_id: int) -> List[dict]:
+    """
+    Retrieves past job requirement & match analysis sessions for the candidate with summary statistics.
+    """
+    from app.models import Analysis, Job, CV
+    from app.services.scoring_service import calculate_skill_score
+    from app.services.skill_analysis_service import combine_cv_and_assessment
+
+    analyses = db.query(Analysis).filter(Analysis.user_id == user_id).order_by(Analysis.created_at.desc()).all()
+    sessions = []
+
+    latest_cv = db.query(CV).filter(CV.user_id == user_id).order_by(CV.uploaded_at.desc()).first()
+
+    for a in analyses:
+        job = db.query(Job).filter(Job.id == a.job_id).first()
+        cv_obj = db.query(CV).filter(CV.id == a.cv_id).first()
+        if not cv_obj:
+            cv_obj = latest_cv
+
+        parsed_skills = []
+        job_desc = getattr(job, "description", None) if job else None
+        if job_desc is not None:
+            try:
+                parsed_skills = json.loads(str(job_desc))
+            except Exception:
+                pass
+
+        score_data = {"score": 0, "matched_count": 0, "missing_count": 0, "total_skills": 0}
+        combined = {"skills": []}
+
+        if parsed_skills:
+            raw_analysis = getattr(a, "raw_analysis_data", None)
+            if raw_analysis is not None:
+                try:
+                    evaluated_skills = json.loads(str(raw_analysis))
+                except Exception:
+                    evaluated_skills = []
+            else:
+                evaluated_skills = []
+
+            if not evaluated_skills:
+                evaluated_skills = [
+                    {"skill": s.get("skill"), "required_level": s.get("level", "unspecified"), "importance": s.get("importance", "required"), "cv_level": "not_found", "cv_match_status": "Missing", "evidence": None}
+                    for s in parsed_skills if isinstance(s, dict)
+                ]
+            matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
+            missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
+            score_data = calculate_skill_score(matched_skills, missing_skills)
+            analysis_id_val = int(str(getattr(a, "id"))) if getattr(a, "id", None) is not None else None
+            combined = combine_cv_and_assessment({
+                "skills": evaluated_skills,
+                "matched_skills": matched_skills,
+                "missing_skills": missing_skills,
+                "score_data": score_data
+            }, db, user_id, analysis_id_val)
+
+        skills_list = combined.get("skills", [])
+        total_skills_count = len(skills_list) if skills_list else len(parsed_skills)
+        matched_skills_count = len([s for s in skills_list if s.get("matched") and not s.get("is_weakness")]) if skills_list else score_data.get("matched_count", 0)
+        improvement_skills_count = len([s for s in skills_list if s.get("is_weakness") or not s.get("matched")]) if skills_list else score_data.get("missing_count", 0)
+
+        score_val = float(str(a.overall_score)) if a.overall_score is not None else float(score_data.get("score", 0))
+
+        if score_val >= 80:
+            overall_readiness = "Advanced"
+        elif score_val >= 60:
+            overall_readiness = "Intermediate"
+        elif score_val >= 40:
+            overall_readiness = "Basic"
+        else:
+            overall_readiness = "Foundational"
+
+        assessed_count = len([s for s in skills_list if s.get("assessed_level") is not None])
+        assessment_status = "Completed" if assessed_count > 0 or total_skills_count > 0 else "Pending"
+
+        sessions.append({
+            "analysis_id": a.id,
+            "job_id": a.job_id,
+            "job_title": job.title if job else "Job Position",
+            "company": job.company if job else "",
+            "requirements": job.description if job else "",
+            "parsed_skills": parsed_skills,
+            "skills": skills_list,
+            "cv_filename": cv_obj.file_name if cv_obj else "Uploaded Resume",
+            "overall_score": score_val,
+            "total_skills_count": total_skills_count,
+            "matched_skills_count": matched_skills_count,
+            "improvement_skills_count": improvement_skills_count,
+            "assessment_status": assessment_status,
+            "overall_readiness": overall_readiness,
+            "final_verdict": combined.get("final_verdict") or combined.get("readiness_verdict") or overall_readiness,
+            "readiness_verdict": combined.get("readiness_verdict") or combined.get("final_verdict") or overall_readiness,
+            "is_preliminary": combined.get("is_preliminary", True),
+            "recommendation_confidence": combined.get("recommendation_confidence"),
+            "assessed_skills_count": assessed_count,
+            "status_badge": "Analysis Complete",
+            "created_at": getattr(a, "created_at").isoformat() if getattr(a, "created_at", None) is not None else None
+        })
+    return sessions
+
+
+def get_candidate_session_detail(
+    db: Session,
+    analysis_id: int,
+    user_id: int,
+    force_reanalyze: bool = False
+) -> dict:
+    """
+    Retrieves full analysis result details for a specific historical session.
+    """
+    from app.models import Analysis, Job, CV
+    from app.services.requirement_service import evaluate_cv_with_gemini
+    from app.services.scoring_service import calculate_skill_score
+    from app.services.skill_analysis_service import combine_cv_and_assessment
+
+    analysis_record = db.query(Analysis).filter(Analysis.id == analysis_id, Analysis.user_id == user_id).first()
+    if not analysis_record:
+        raise HTTPException(status_code=404, detail="Analysis session not found.")
+
+    job_record = db.query(Job).filter(Job.id == analysis_record.job_id).first()
+    cv_record = db.query(CV).filter(CV.id == analysis_record.cv_id).first()
+    if not cv_record:
+        cv_record = db.query(CV).filter(CV.user_id == user_id).order_by(CV.uploaded_at.desc()).first()
+
+    job_desc = getattr(job_record, "description", None) if job_record else None
+    parsed_requirements = parse_and_validate_requirements(str(job_desc)) if job_desc else []
+
+    cv_text = ""
+    cv_path = getattr(cv_record, "file_path", None) if cv_record else None
+    if cv_path and os.path.exists(str(cv_path)):
+        pdf_data = extract_pdf_text(str(cv_path))
+        cv_text = pdf_data.get("text", "")
+
+    raw_data = getattr(analysis_record, "raw_analysis_data", None)
+    if raw_data and not force_reanalyze:
+        evaluated_skills = json.loads(str(raw_data))
+    else:
+        if not force_reanalyze and not raw_data:
+            evaluated_skills = [
+                {
+                    "skill": s.get("skill"), 
+                    "required_level": s.get("level", "unspecified"), 
+                    "importance": s.get("importance", "required"), 
+                    "cv_level": "unspecified", 
+                    "cv_match_status": "Missing", 
+                    "evidence": None,
+                    "actionable_feedback": None
+                }
+                for s in parsed_requirements if isinstance(s, dict)
+            ]
+        else:
+            evaluated_skills = evaluate_cv_with_gemini(cv_text, parsed_requirements) if cv_text else []
+            if not evaluated_skills:
+                evaluated_skills = [
+                    {"skill": s.get("skill"), "required_level": s.get("level", "unspecified"), "importance": s.get("importance", "required"), "cv_level": "not_found", "cv_match_status": "Missing", "evidence": None, "actionable_feedback": None}
+                    for s in parsed_requirements if isinstance(s, dict)
+                ]
+            
+            if force_reanalyze:
+                setattr(analysis_record, "raw_analysis_data", json.dumps(evaluated_skills))
+                db.commit()
+
+    matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
+    missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
+    score_data = calculate_skill_score(matched_skills, missing_skills)
+
+    cv_matching_result = {
+        "filename": getattr(cv_record, "file_name", "Resume.pdf") if cv_record else "Resume.pdf",
+        "pages": 1,
+        "skills": evaluated_skills,
+        "matched_skills": matched_skills,
+        "missing_skills": missing_skills,
+        "score_data": score_data
+    }
+
+    analysis_record_id = int(str(getattr(analysis_record, "id"))) if getattr(analysis_record, "id", None) is not None else None
+    result = combine_cv_and_assessment(
+        cv_matching_result,
+        db_or_assessments=db,
+        user_id=user_id,
+        analysis_id=analysis_record_id,
+    )
+    result["job_title"] = job_record.title if job_record else "Job Position"
+    result["company"] = job_record.company if job_record else ""
+    result["analysis_id"] = analysis_record_id
+    return result

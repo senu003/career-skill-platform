@@ -204,6 +204,9 @@ class AssessmentQuestion(Base):
     correct_answer = Column(String(1), nullable=False)
     question_type = Column(String(50), nullable=False, default="MCQ", server_default=text("'MCQ'"))
     is_active = Column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
+    explanation = Column(Text, nullable=True)
+    misconception = Column(Text, nullable=True)
+    interview_tip = Column(Text, nullable=True)
 
     options = relationship("QuestionOption", back_populates="question_obj", cascade="all, delete-orphan")
 
@@ -282,4 +285,4 @@ class AssessmentAnswer(Base):
     __table_args__ = (
         CheckConstraint("selected_answer IN ('A', 'B', 'C', 'D')", name="valid_selected_answer"),
         UniqueConstraint("attempt_id", "question_id", name="unique_attempt_question"),
-    )
+    )

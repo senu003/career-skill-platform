@@ -22,7 +22,9 @@ class TestDatabaseMigrations(unittest.TestCase):
 
         self.backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         self.ini_path = os.path.join(self.backend_dir, "alembic.ini")
+        self.script_dir = os.path.join(self.backend_dir, "alembic")
         self.alembic_cfg = Config(self.ini_path)
+        self.alembic_cfg.set_main_option("script_location", self.script_dir)
         self.alembic_cfg.set_main_option("sqlalchemy.url", self.db_url)
 
     def tearDown(self):

@@ -60,6 +60,7 @@ def run_database_migrations(database_url: str = None) -> bool:
 
     ini_path = os.path.join(backend_dir, "alembic.ini")
     alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "alembic"))
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
 
     logger.info("Executing Alembic migration upgrade head...")

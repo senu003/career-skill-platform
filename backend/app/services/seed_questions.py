@@ -786,7 +786,8 @@ INITIAL_QUESTIONS = [
 
 def seed_assessment_questions(db: Session):
     """
-    Idempotently seeds MCQ questions and options into the database.
+    Idempotently seeds MCQ questions and options into the database,
+    and updates explanations, misconceptions, and interview tips on existing questions.
     """
     for q_data in INITIAL_QUESTIONS:
         existing = db.query(AssessmentQuestion).filter(
@@ -795,7 +796,20 @@ def seed_assessment_questions(db: Session):
             AssessmentQuestion.question == q_data["question"]
         ).first()
 
-        if not existing:
+        if existing:
+            updated = False
+            if q_data.get("explanation") and existing.explanation != q_data["explanation"]:
+                existing.explanation = q_data["explanation"]
+                updated = True
+            if q_data.get("misconception") and existing.misconception != q_data["misconception"]:
+                existing.misconception = q_data["misconception"]
+                updated = True
+            if q_data.get("interview_tip") and existing.interview_tip != q_data["interview_tip"]:
+                existing.interview_tip = q_data["interview_tip"]
+                updated = True
+            if updated:
+                db.add(existing)
+        else:
             q_obj = AssessmentQuestion(
                 skill=q_data["skill"],
                 level=q_data["level"],
@@ -803,7 +817,10 @@ def seed_assessment_questions(db: Session):
                 question=q_data["question"],
                 correct_answer=q_data["correct_answer"],
                 question_type="MCQ",
-                is_active=True
+                is_active=True,
+                explanation=q_data.get("explanation"),
+                misconception=q_data.get("misconception"),
+                interview_tip=q_data.get("interview_tip")
             )
             db.add(q_obj)
             db.flush()  # to get q_obj.id

@@ -10,7 +10,22 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated) {
+    return (
+      <nav className="navbar">
+        <div className="nav-brand" onClick={() => navigate('/login')} style={{ cursor: 'pointer' }}>
+          <span>CareerSkill</span>
+          <span className="nav-brand-badge">AI</span>
+        </div>
+
+        <div className="nav-links">
+          <NavLink to="/login" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Sign In
+          </NavLink>
+        </div>
+      </nav>
+    );
+  }
 
   const handleLogout = async () => {
     // Fire-and-forget audit log
@@ -35,6 +50,9 @@ export default function Navbar() {
         <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           Dashboard
         </NavLink>
+        <NavLink to="/interview-prep" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          Interview Prep
+        </NavLink>
         <NavLink to="/recommendation" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
           Full Report
         </NavLink>
@@ -50,12 +68,12 @@ export default function Navbar() {
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              background: 'var(--surface-2, rgba(255,255,255,0.08))',
+              background: '#f8fafc',
               border: '1.5px solid var(--border-color)',
               borderRadius: '2rem',
               padding: '0.3rem 0.75rem 0.3rem 0.4rem',
               cursor: 'pointer',
-              color: 'var(--text-primary)',
+              color: 'var(--text-main, #1e1b4b)',
               fontWeight: 600,
               fontSize: '0.85rem',
               transition: 'all 0.2s',

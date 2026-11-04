@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Upload, FileText, CheckCircle2, AlertCircle, AlertTriangle,
@@ -8,6 +8,14 @@ import {
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
+import SkillMatchTable from '../components/SkillMatchTable';
+import {
+  formatLevel,
+  translateRequiredLevel,
+  translateCvLevel,
+  getLevelPillClass,
+} from '../utils/formatters';
+
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -93,7 +101,7 @@ export default function DashboardPage() {
   // Sync session from URL if explicit analysis_id is provided
   useEffect(() => {
     let isCancelled = false;
-    if (urlAnalysisId) {
+    if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
       const fetchSession = async () => {
         try {
           const res = await fetchWithAuth(`/cv/sessions/${urlAnalysisId}`);
@@ -109,7 +117,7 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [urlAnalysisId, setAnalysisResult]);
+  }, [urlAnalysisId, analysisResult?.analysis_id, setAnalysisResult]);
 
   const isSkillAvailable = (skillName) => {
     return isSupportedSkill(skillName, supportedSkillsList);
@@ -242,55 +250,16 @@ export default function DashboardPage() {
   const handleAnalyzeAnother = () => {
     clearAnalysis();
     setSelectedFile(null);
+    setJobTitle('');
+    setCompanyName('');
     setJobDescription('');
     setExpandedEvidence({});
     setActiveFilter('All');
     setError(null);
+    navigate('/dashboard', { replace: true });
   };
 
-  // Format Helper: Capitalize text strings safely
-  const formatLevel = (lvl) => {
-    if (!lvl) return 'N/A';
-    const s = String(lvl).trim();
-    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-  };
 
-  // Translate required level from JD — if unspecified, show "Any Level"
-  const translateRequiredLevel = (level) => {
-    if (!level) return 'Any Level';
-    const clean = String(level).trim().toLowerCase();
-    if (clean === 'unspecified' || clean === 'none' || clean === 'null') return 'Any Level';
-    if (clean === 'basic') return 'Basic';
-    if (clean === 'intermediate') return 'Intermediate';
-    if (clean === 'advanced') return 'Advanced';
-    return formatLevel(level);
-  };
-
-  // Translate CV Level
-  // "unspecified" -> "Mentioned (level unclear)"
-  // "not_found"   -> "Not in CV"
-  const translateCvLevel = (cvLevel, isMatched) => {
-    if (!cvLevel) {
-      return isMatched ? 'Mentioned (level unclear)' : 'Not in CV';
-    }
-    const clean = String(cvLevel).trim().toLowerCase();
-    if (clean === 'unspecified') return 'Mentioned (level unclear)';
-    if (clean === 'not_found' || clean === 'null' || clean === 'none') return 'Not in CV';
-    if (clean === 'basic') return 'Basic';
-    if (clean === 'intermediate') return 'Intermediate';
-    if (clean === 'advanced') return 'Advanced';
-    return formatLevel(cvLevel);
-  };
-
-  const getLevelPillClass = (levelStr, isMissing) => {
-    if (isMissing) return 'level-pill-missing';
-    const s = String(levelStr || '').toLowerCase();
-    if (s.includes('adv')) return 'level-pill-advanced';
-    if (s.includes('inter')) return 'level-pill-intermediate';
-    if (s.includes('bas')) return 'level-pill-basic';
-    if (s.includes('not in cv') || s.includes('missing')) return 'level-pill-missing';
-    return 'level-pill-any';
-  };
 
   // Extract skills list safely from backend response
   const skillsList = analysisResult?.skills || [
@@ -552,9 +521,24 @@ export default function DashboardPage() {
   const assessedCount = skillsList.filter(s => s.assessed_level !== null && s.assessed_level !== undefined).length;
   const isPreliminary = Boolean(analysisResult?.is_preliminary ?? (assessedCount === 0));
 
+  // Filtered skills list driven by glance card filters
+  const displayedSkillsList = useMemo(() => {
+    if (activeFilter === 'Matched') {
+      return skillsList.filter(s => getGapTier(s) === 'meets' || getGapTier(s) === 'exceeds');
+    }
+    if (activeFilter === 'LevelGaps' || activeFilter === 'Gaps') {
+      return skillsList.filter(s => getGapTier(s) === 'level_gap');
+    }
+    if (activeFilter === 'Missing') {
+      return skillsList.filter(s => getGapTier(s) === 'totally_missing');
+    }
+    return skillsList;
+  }, [skillsList, activeFilter]);
+
   // Header display: never show placeholder like "dfgh at ghj"
-  const displayJobTitle = jobTitle && jobTitle.trim() ? jobTitle.trim() : 'Your target job';
-  const displayCompany = companyName && companyName.trim() ? ` at ${companyName.trim()}` : '';
+  const displayJobTitle = (jobTitle && jobTitle.trim()) || analysisResult?.job_title || 'Your target job';
+  const effectiveCompany = (companyName && companyName.trim()) || analysisResult?.company || '';
+  const displayCompany = effectiveCompany ? ` at ${effectiveCompany}` : '';
 
   return (
     <div className="fade-in">
@@ -844,76 +828,87 @@ export default function DashboardPage() {
            5. Footer CTA "Continue to Assessment"
            ======================================================== */
         <div className="fade-in">
-          {/* 1. CLEAN TOP HEADER */}
-          <div className="flex justify-between items-center mb-5 flex-wrap gap-4 pb-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="badge badge-purple" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  CV & Job Gap Analysis
-                </span>
-                <span className="text-xs text-muted">
-                  Session ID #{analysisResult?.analysis_id || 'Active'}
-                </span>
-              </div>
-              <h1 className="page-title text-2xl font-extrabold text-main" style={{ margin: 0 }}>
-                {displayJobTitle}{displayCompany}
-              </h1>
-              <p className="text-xs text-muted mt-1">
-                Matched against: <strong style={{ color: 'var(--text-main)' }}>{selectedFile?.name || savedCv?.file_name || 'Uploaded Resume'}</strong>
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleAnalyzeAnother}
-                className="btn btn-outline flex items-center gap-1.5"
-                id="btn-analyze-another"
-                style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
-              >
-                <RefreshCw size={14} />
-                <span>Analyze Another Job</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const analysisId = analysisResult?.analysis_id;
-                  navigate(analysisId ? `/recommendation?analysis_id=${analysisId}` : '/recommendation');
-                }}
-                className="btn btn-primary flex items-center gap-1.5"
-                style={{ padding: '0.55rem 1.15rem', fontSize: '0.85rem', fontWeight: 600 }}
-              >
-                <Sparkles size={15} />
-                <span>View Full AI Report</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 2. CLEAN STATS BAR (Sleek, uncluttered, neutral color palette) */}
+          {/* 1. TOP HEADER & MATCH AT A GLANCE (Consistent design with Interview Prep Hub) */}
           <div
-            className="card mb-6"
             style={{
-              padding: '1.25rem 1.75rem',
-              backgroundColor: '#ffffff',
-              border: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: '1.5rem',
+              flexWrap: 'wrap',
+              marginBottom: '2rem',
             }}
           >
-            <div className="flex items-center justify-between gap-6 flex-wrap">
-              {/* Overall Match */}
-              <div>
-                <div className="text-xs uppercase tracking-wider font-semibold text-muted">Overall Match</div>
-                <div className="font-extrabold text-3xl text-main mt-0.5" style={{ color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
-                  {matchPercentage}%
+            {/* Left Column: Icon + Header Info + Action Buttons */}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flex: '1 1 360px', minWidth: '300px' }}>
+              <div className="prep-header-icon" style={{ marginTop: '0.2rem' }}>
+                <Briefcase size={28} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                  <span className="badge badge-purple" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    CV & Job Gap Analysis
+                  </span>
+                  <span className="text-xs text-muted">
+                    Session ID #{analysisResult?.analysis_id || 'Active'}
+                  </span>
                 </div>
-                <div className="text-xs text-muted mt-0.5">
-                  {requiredFoundCount} of {totalRequiredCount} required skills found in CV
+                <h1 className="page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.35rem 0', color: 'var(--text-main)', lineHeight: 1.25 }}>
+                  {displayJobTitle}{displayCompany}
+                </h1>
+                <p className="page-subtitle" style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  Matched against: <strong style={{ color: 'var(--text-main)' }}>{selectedFile?.name || savedCv?.file_name || 'Uploaded Resume'}</strong>
+                </p>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleAnalyzeAnother}
+                    className="btn btn-outline flex items-center gap-1.5"
+                    id="btn-analyze-another"
+                    style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
+                  >
+                    <RefreshCw size={14} />
+                    <span>Analyze Another Job</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const analysisId = analysisResult?.analysis_id;
+                      navigate(analysisId ? `/recommendation?analysis_id=${analysisId}` : '/recommendation');
+                    }}
+                    className="btn btn-primary flex items-center gap-1.5"
+                    style={{ padding: '0.55rem 1.15rem', fontSize: '0.85rem', fontWeight: 600 }}
+                  >
+                    <Sparkles size={15} />
+                    <span>View Full AI Report</span>
+                  </button>
                 </div>
               </div>
+            </div>
 
-              {/* Readiness Verdict */}
-              <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '1.5rem' }}>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs uppercase tracking-wider font-semibold text-muted">Candidate Readiness</div>
+            {/* Right Column: Match at a Glance Card */}
+            <div
+              className="card"
+              style={{
+                padding: '1rem 1.5rem',
+                marginBottom: 0,
+                minWidth: '340px',
+                flex: '0 1 440px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span className="text-xs uppercase tracking-wider font-semibold text-muted">
+                  Your match at a glance
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span
+                    className="badge badge-purple"
+                    style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.5rem' }}
+                    title="Candidate readiness verdict"
+                  >
+                    {readinessVerdict}
+                  </span>
                   {isPreliminary && (
                     <span
                       className="badge"
@@ -925,281 +920,140 @@ export default function DashboardPage() {
                         border: '1px solid #fde68a',
                         fontWeight: 700,
                       }}
+                      title="Technical proficiency unverified (0 assessments completed)"
                     >
                       Preliminary
                     </span>
                   )}
                 </div>
-                <div className="font-bold text-lg text-main mt-0.5">
-                  {readinessVerdict}
+              </div>
+
+              {/* 4 Stats Columns */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', textAlign: 'center' }}>
+                <div
+                  onClick={() => setActiveFilter('All')}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: activeFilter === 'All' ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                  title="Show all skills"
+                >
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
+                    {matchPercentage}%
+                  </div>
+                  <div className="text-xs text-muted">Overall Match</div>
                 </div>
-                <div className="text-xs text-muted mt-0.5">
-                  {isPreliminary
-                    ? 'Technical proficiency unverified (0 assessments completed)'
-                    : (gapCount + missingCount === 0 ? 'All required skills verified in CV' : `${gapCount + missingCount} skill gap${gapCount + missingCount > 1 ? 's' : ''} identified`)}
+
+                <div
+                  onClick={() => setActiveFilter(activeFilter === 'Matched' ? 'All' : 'Matched')}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: activeFilter === 'Matched' ? 'rgba(34, 197, 94, 0.12)' : 'transparent',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                  title="Filter meets target skills"
+                >
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-color)' }}>
+                    {meetsCount}
+                  </div>
+                  <div className="text-xs text-muted">Meets</div>
+                </div>
+
+                <div
+                  onClick={() => setActiveFilter(activeFilter === 'LevelGaps' ? 'All' : 'LevelGaps')}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: activeFilter === 'LevelGaps' ? 'rgba(249, 115, 22, 0.12)' : 'transparent',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                  title="Filter level gap skills"
+                >
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--warning-color)' }}>
+                    {gapCount}
+                  </div>
+                  <div className="text-xs text-muted">Level Gaps</div>
+                </div>
+
+                <div
+                  onClick={() => setActiveFilter(activeFilter === 'Missing' ? 'All' : 'Missing')}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: activeFilter === 'Missing' ? 'rgba(239, 68, 68, 0.12)' : 'transparent',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                  title="Filter unverified skills"
+                >
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444' }}>
+                    {missingCount}
+                  </div>
+                  <div className="text-xs text-muted">Unverified</div>
                 </div>
               </div>
 
-              {/* Skill Count Summaries */}
-              <div className="flex items-center gap-2 flex-wrap" style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '1.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter('Matched')}
-                  className="badge"
-                  style={{
-                    padding: '0.45rem 0.85rem',
-                    backgroundColor: activeFilter === 'Matched' ? '#f1f5f9' : '#ffffff',
-                    color: '#166534',
-                    border: '1px solid #bbf7d0',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✓ {meetsCount} Meets
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter('Gaps')}
-                  className="badge"
-                  style={{
-                    padding: '0.45rem 0.85rem',
-                    backgroundColor: activeFilter === 'Gaps' ? '#f1f5f9' : '#ffffff',
-                    color: '#9a3412',
-                    border: '1px solid #fed7aa',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ⚠ {gapCount} Level Gaps
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter('Gaps')}
-                  className="badge"
-                  style={{
-                    padding: '0.45rem 0.85rem',
-                    backgroundColor: activeFilter === 'Gaps' ? '#f1f5f9' : '#ffffff',
-                    color: '#991b1b',
-                    border: '1px solid #fecaca',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✕ {missingCount} Unverified in CV
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. INTERACTIVE SKILL MATRIX (GRID) */}
-          <div className="card mb-6" style={{ padding: '1.25rem 1.5rem', backgroundColor: '#ffffff' }}>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div>
-                <h2 className="card-title mb-0.5 text-lg font-bold flex items-center gap-2">
-                  <span>Skill Gap & Verification Matrix</span>
-                </h2>
-                <p className="text-muted text-xs">
-                  Compare required job skills with extracted CV evidence and take assessments to verify each skill level.
-                </p>
-              </div>
-
-              {/* Filter Tabs */}
-              <div className="filter-chips" role="group" aria-label="Filter skills">
-                {[
-                  { id: 'All', label: 'All Skills', count: skillsList.length },
-                  { id: 'Gaps', label: 'Gaps Only', count: allGapSkills.length },
-                  { id: 'Matched', label: 'Meets / Exceeds', count: meetsCount },
-                  { id: 'Required', label: 'Required', count: requiredSkills.length },
-                  { id: 'Preferred', label: 'Nice to Have', count: preferredSkills.length },
-                ].map((chip) => (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    className={`filter-chip ${activeFilter === chip.id ? 'active' : ''}`}
-                    onClick={() => setActiveFilter(chip.id)}
-                  >
-                    <span>{chip.label}</span>
-                    <span className="filter-chip-count">{chip.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* The Modern Grid Table */}
-            <div className="skill-matrix-container">
-              <table className="skill-matrix-table" aria-label="Skill Gap Analysis Matrix">
-                <thead>
-                  <tr>
-                    <th style={{ width: '22%' }}>Skill</th>
-                    <th style={{ width: '13%' }}>Importance</th>
-                    <th style={{ width: '16%' }}>Job Requirement</th>
-                    <th style={{ width: '17%' }}>Your CV Evidence</th>
-                    <th style={{ width: '16%' }}>Match Status</th>
-                    <th style={{ width: '16%', textAlign: 'right' }}>Assessment & Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBreakdownSkills.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
-                        No skills match the selected "{activeFilter}" filter.
-                      </td>
-                    </tr>
+              {/* Subtitle / Explanatory footer inside card */}
+              <div
+                style={{
+                  marginTop: '0.75rem',
+                  paddingTop: '0.5rem',
+                  borderTop: '1px solid var(--border-color)',
+                  fontSize: '0.72rem',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>{requiredFoundCount} of {totalRequiredCount} required skills in CV</span>
+                <span>
+                  {activeFilter !== 'All' ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveFilter('All');
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary-color)',
+                        cursor: 'pointer',
+                        fontSize: '0.72rem',
+                        padding: 0,
+                        textDecoration: 'underline',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Clear filter ({activeFilter === 'Matched' ? 'Meets' : activeFilter === 'LevelGaps' ? 'Level Gaps' : 'Unverified'})
+                    </button>
+                  ) : isPreliminary ? (
+                    '0 quizzes completed'
                   ) : (
-                    filteredBreakdownSkills.map((item, idx) => {
-                      const status = getSkillStatus(item);
-                      const isGap = isSkillGap(item);
-                      const tier = status.tier;
-                      const reqLvl = translateRequiredLevel(item.required_level || item.level);
-                      const isNiceToHave = (item.importance || 'required').toLowerCase() === 'preferred';
-                      const isAssessed = item.assessed_level !== null && item.assessed_level !== undefined;
-                      const skillKey = item.skill || idx;
-                      const isAvailable = isSkillAvailable(item.skill);
-                      const cvLvlDisplay = translateCvLevel(item.cv_level, item.matched);
-                      const isMissingInCv = cvLvlDisplay === 'Not in CV';
-
-                      return (
-                        <React.Fragment key={skillKey}>
-                          <tr>
-                            {/* 1. Skill Name */}
-                            <td>
-                              <div className="font-bold text-main flex items-center gap-1.5">
-                                <span>{item.skill}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleEvidence(skillKey)}
-                                className="text-xs text-muted flex items-center gap-1 mt-1 hover:text-primary-600"
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                              >
-                                <FileText size={11} />
-                                <span style={{ textDecoration: 'underline' }}>
-                                  {expandedEvidence[skillKey] ? 'Hide CV quote' : 'View CV quote'}
-                                </span>
-                              </button>
-                            </td>
-
-                            {/* 2. Importance */}
-                            <td>
-                              <span
-                                className="badge"
-                                style={{
-                                  fontSize: '0.72rem',
-                                  fontWeight: 600,
-                                  backgroundColor: isNiceToHave ? '#ffffff' : '#f1f5f9',
-                                  color: isNiceToHave ? '#64748b' : '#1e293b',
-                                  border: isNiceToHave ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
-                                }}
-                              >
-                                {isNiceToHave ? 'Nice to Have' : 'Required'}
-                              </span>
-                            </td>
-
-                            {/* 3. Job Requirement Level */}
-                            <td>
-                              <span className={`level-pill ${getLevelPillClass(reqLvl, false)}`}>
-                                {reqLvl}
-                              </span>
-                            </td>
-
-                            {/* 4. CV Level */}
-                            <td>
-                              <span className={`level-pill ${getLevelPillClass(cvLvlDisplay, isMissingInCv)}`}>
-                                {cvLvlDisplay}
-                              </span>
-                            </td>
-
-                            {/* 5. Match Status Badge */}
-                            <td>
-                              <span className={`status-badge ${status.className}`} style={{ fontSize: '0.78rem' }}>
-                                {status.label}
-                              </span>
-                            </td>
-
-                            {/* 6. Assessment / Action */}
-                            <td style={{ textAlign: 'right' }}>
-                              {isAssessed ? (
-                                <div className="flex flex-col items-end gap-1">
-                                  <span
-                                    className="badge"
-                                    style={{
-                                      backgroundColor: '#ecfdf5',
-                                      color: '#059669',
-                                      border: '1px solid #a7f3d0',
-                                      fontWeight: 600,
-                                      fontSize: '0.75rem',
-                                    }}
-                                  >
-                                    Assessed: {formatLevel(item.assessed_level)} {item.total_score !== null && item.total_score !== undefined ? `(${Math.round(item.total_score > 1 ? item.total_score : item.total_score * 100)}%)` : ''}
-                                  </span>
-                                  {isAvailable && (
-                                    <button
-                                      type="button"
-                                      onClick={() => navigate(assessmentPath(item.skill))}
-                                      className="text-xs text-muted hover:text-primary-600"
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                                    >
-                                      Retake test
-                                    </button>
-                                  )}
-                                </div>
-                              ) : isAvailable ? (
-                                isGap ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => navigate(assessmentPath(item.skill))}
-                                    className="btn btn-primary"
-                                    style={{
-                                      padding: '0.35rem 0.85rem',
-                                      fontSize: '0.78rem',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {tier === 'totally_missing' ? 'Verify Skill →' : 'Take Assessment →'}
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => navigate(assessmentPath(item.skill))}
-                                    className="btn btn-outline"
-                                    style={{
-                                      padding: '0.35rem 0.75rem',
-                                      fontSize: '0.78rem',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    Verify Level
-                                  </button>
-                                )
-                              ) : (
-                                <span className="text-xs text-muted" style={{ fontStyle: 'italic' }}>
-                                  {isMissingInCv ? 'No quiz in DB' : 'CV verified'}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-
-                          {/* Expanded Evidence Accordion Row */}
-                          {expandedEvidence[skillKey] && (
-                            <tr style={{ backgroundColor: '#f8fafc' }}>
-                              <td colSpan={6} style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-color)' }}>
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs font-bold text-muted uppercase">CV Context:</span>
-                                  <span className="text-xs text-main" style={{ fontStyle: 'italic', lineHeight: 1.5 }}>
-                                    {item.evidence && item.evidence.trim() ? `"${item.evidence}"` : 'No direct mention found in CV text.'}
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })
+                    gapCount + missingCount === 0 ? 'All skills verified' : `${gapCount + missingCount} skill gap${gapCount + missingCount > 1 ? 's' : ''}`
                   )}
-                </tbody>
-              </table>
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* 2. SKILL MATCH TABLE */}
+          <SkillMatchTable
+            skills={displayedSkillsList}
+            supportedSkills={supportedSkillsList}
+            analysisId={activeAnalysisId}
+            title="Skill match"
+            className="mb-6"
+          />
 
           {/* 4. FOOTER REPORT BAR */}
           <div

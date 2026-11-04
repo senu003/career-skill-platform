@@ -491,6 +491,7 @@ def combine_cv_and_assessment(
             )
 
         entry = {
+            "attempt_id": assessment_data.get("attempt_id") if assessment_data else item.get("attempt_id"),
             "skill": skill_name,
             "level": req_level,
             "required_level": req_level,
@@ -563,3 +564,89 @@ def combine_cv_and_assessment(
         combined_result["verification_status"] = "Unverified (Preliminary CV Evidence)"
 
     return combined_result
+
+
+def build_assessment_attempt_result(db: Session, attempt: AssessmentAttempt) -> dict:
+    """
+    Builds the complete assessment evaluation result for an attempt:
+    extracts telemetry scores, determines assessed level (with ML fallback if unassigned),
+    calculates level gap and weakness status, generates rule recommendations,
+    longitudinal improvement probability, and Model 1 evaluator prediction.
+    """
+    scores = extract_assessment_scores(db, {"attempt_id": attempt.id})
+    total_score = scores.get("total_score") if scores else None
+
+    assessed_lvl = attempt.assessed_level
+    if not assessed_lvl and scores:
+        assessed_lvl = generate_ml_prediction(
+            matched=True,
+            required_level=str(attempt.required_level),
+            importance="required",
+            scores=scores
+        )
+        if assessed_lvl and attempt.assessed_level != assessed_lvl:
+            attempt.assessed_level = assessed_lvl
+            db.commit()
+
+    gap = calculate_level_gap(attempt.required_level, assessed_lvl)
+    weakness_info = calculate_weakness(level_gap=gap, total_score=total_score)
+    rec_info = generate_recommendation(
+        skill=str(attempt.skill),
+        required_level=attempt.required_level,
+        assessed_level=assessed_lvl,
+        level_gap=gap,
+        total_score=total_score,
+        is_weakness=weakness_info["is_weakness"],
+        weakness_reason=weakness_info["weakness_reason"]
+    )
+
+    from app.services.longitudinal_service import predict_skill_improvement_from_history
+    improvement_prob = predict_skill_improvement_from_history(
+        db=db,
+        user_id=attempt.user_id,
+        skill=str(attempt.skill),
+        current_attempt_id=attempt.id
+    )
+
+    # Calculate retake telemetry (attempt_count and previous_best_score)
+    all_attempts = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.user_id == attempt.user_id,
+        AssessmentAttempt.completed_at.isnot(None),
+        func.lower(AssessmentAttempt.skill) == attempt.skill.strip().lower()
+    ).order_by(AssessmentAttempt.completed_at.asc(), AssessmentAttempt.id.asc()).all()
+    attempt_count = max(1, len(all_attempts))
+    prior_scores = []
+    for att in all_attempts:
+        if att.id != attempt.id:
+            att_scores = extract_assessment_scores(db, {"attempt_id": att.id})
+            if att_scores and att_scores.get("total_score") is not None:
+                prior_scores.append(float(att_scores["total_score"]))
+    previous_best_score = max(prior_scores) if prior_scores else (total_score if total_score is not None else None)
+
+    model1_rec, model1_conf = generate_model1_evaluator_output(
+        required_level=str(attempt.required_level),
+        assessed_level=assessed_lvl,
+        scores=scores,
+        cv_level=attempt.cv_level,
+        attempt_count=attempt_count,
+        previous_best_score=previous_best_score
+    )
+
+    return {
+        "attempt_id": attempt.id,
+        "skill": attempt.skill,
+        "required_level": attempt.required_level,
+        "assessed_level": assessed_lvl,
+        "level_gap": gap,
+        "total_score": total_score,
+        "is_weakness": weakness_info["is_weakness"],
+        "weakness_reason": weakness_info["weakness_reason"],
+        "priority": rec_info["priority"],
+        "recommendation": rec_info["recommendation"],
+        "recommendation_reason": rec_info["reason"],
+        "skill_recommendation": model1_rec,
+        "recommendation_confidence": model1_conf,
+        "improvement_probability": improvement_prob,
+        "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None
+    }
+

@@ -159,3 +159,36 @@ export async function resetPassword(token, newPassword) {
 
   return response.json();
 }
+
+/**
+ * Downloads or previews an uploaded CV file as a blob.
+ */
+export async function downloadCvFile(cvId, filename) {
+  const token = sessionStorage.getItem('token');
+  const headers = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/cv/${cvId}/download`, { headers });
+  if (!response.ok) {
+    let errorMsg = 'Failed to download CV file.';
+    try {
+      const errData = await response.json();
+      if (errData.detail) errorMsg = errData.detail;
+    } catch {
+      // Use fallback error message
+    }
+    throw new Error(errorMsg);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'resume.pdf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}

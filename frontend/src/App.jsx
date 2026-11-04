@@ -10,6 +10,9 @@ import AssessmentPage from './pages/AssessmentPage';
 import ResultsPage from './pages/ResultsPage';
 import FinalResultPage from './pages/FinalResultPage';
 import HistoryPage from './pages/HistoryPage';
+import InterviewPrepHub from './pages/interview-prep/InterviewPrepHub';
+import SkillAnalysisPage from './pages/interview-prep/SkillAnalysisPage';
+import AssessmentReviewPage from './pages/interview-prep/AssessmentReviewPage';
 import { fetchWithAuth } from './api';
 import './App.css';
 
@@ -61,16 +64,32 @@ function App() {
                   element={<PrivateRoute><AssessmentPage /></PrivateRoute>}
                 />
                 <Route
+                  path="/interview-prep"
+                  element={<PrivateRoute><InterviewPrepHub /></PrivateRoute>}
+                />
+                <Route
+                  path="/interview-prep/skill/:skill"
+                  element={<PrivateRoute><SkillAnalysisPage /></PrivateRoute>}
+                />
+                <Route
+                  path="/interview-prep/attempt/:attemptId"
+                  element={<PrivateRoute><AssessmentReviewPage /></PrivateRoute>}
+                />
+                <Route
+                  path="/interview-prep/review/:attemptId"
+                  element={<PrivateRoute><AssessmentReviewPage /></PrivateRoute>}
+                />
+                <Route
                   path="/results/:skill"
                   element={<PrivateRoute><ResultsPage /></PrivateRoute>}
                 />
                 <Route
                   path="/results/attempt/:attemptId"
-                  element={<PrivateRoute><ResultsPage /></PrivateRoute>}
+                  element={<PrivateRoute><AssessmentReviewPage /></PrivateRoute>}
                 />
                 <Route
                   path="/results"
-                  element={<PrivateRoute><ResultsPage /></PrivateRoute>}
+                  element={<PrivateRoute><InterviewPrepHub /></PrivateRoute>}
                 />
                 <Route
                   path="/recommendation"
