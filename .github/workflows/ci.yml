@@ -58,6 +58,7 @@ jobs:
           cd backend
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-test.txt
 
       - name: Verify Alembic fresh database upgrade to head
         run: |
