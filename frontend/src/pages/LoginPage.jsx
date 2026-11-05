@@ -143,7 +143,9 @@ export default function LoginPage() {
   };
 
   const handleGoogleError = () => {
-    setError('Google sign-in was cancelled or failed. Please try again.');
+    setError(
+      'Google sign-in was cancelled or origin is not authorized. If testing locally, ensure http://localhost:5173 is added to Authorized JavaScript origins in Google Cloud Console, or use One-Click Test Login.'
+    );
   };
 
   // ── Instant Demo Login ──────────────────────────────────────────────────────

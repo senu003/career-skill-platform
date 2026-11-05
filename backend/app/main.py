@@ -107,10 +107,24 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
+def _cors_headers_for_request(request: Request) -> dict:
+    origin = request.headers.get("origin")
+    if origin and (origin in frontend_origins or not frontend_origins or "*" in frontend_origins):
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    return {}
+
+
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.error(f"Database error: {exc}")
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=_cors_headers_for_request(request),
+    )
 
 
 @app.exception_handler(Exception)
@@ -118,7 +132,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, (HTTPException, RateLimitExceeded)):
         raise exc
     logger.error(f"Unexpected error: {exc}")
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=_cors_headers_for_request(request),
+    )
 
 
 # New versioned auth routes (recommended)

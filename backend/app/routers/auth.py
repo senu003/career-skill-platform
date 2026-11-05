@@ -236,11 +236,19 @@ def google_auth(payload: GoogleLoginRequest, request: Request, db: Session = Dep
         _audit(db, "google_login_failed", request, details={"reason": "invalid_token"})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google credentials.")
 
+    if not user_info:
+        _audit(db, "google_login_failed", request, details={"reason": "invalid_token"})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google credentials.")
+
     if not user_info.get("email_verified"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Google account email is not verified.")
 
-    email = user_info["email"].lower().strip()
-    google_id = user_info["sub"]
+    email = user_info.get("email", "").lower().strip()
+    google_id = str(user_info.get("google_id") or user_info.get("sub") or "").strip()
+
+    if not email or not google_id:
+        _audit(db, "google_login_failed", request, details={"reason": "missing_profile_data"})
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incomplete Google profile data.")
 
     user = (
         db.query(User)
@@ -255,12 +263,16 @@ def google_auth(payload: GoogleLoginRequest, request: Request, db: Session = Dep
             user.oauth_id = google_id
             if user_info.get("picture"):
                 user.avatar_url = user_info["picture"]
-            db.commit()
-            _audit(db, "google_account_linked", request, user_id=user.id)
+            try:
+                db.commit()
+                _audit(db, "google_account_linked", request, user_id=user.id)
+            except Exception:
+                db.rollback()
 
     if not user:
+        display_name = user_info.get("name") or (email.split("@")[0] if "@" in email else "User")
         user = User(
-            name=user_info.get("name", email.split("@")[0]),
+            name=display_name.strip(),
             email=email,
             password_hash=None,
             oauth_provider="google",
@@ -269,9 +281,15 @@ def google_auth(payload: GoogleLoginRequest, request: Request, db: Session = Dep
             is_active=True,
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
-        logger.info("New user via Google OAuth: id=%s email=%s", user.id, user.email)
+        try:
+            db.commit()
+            db.refresh(user)
+            logger.info("New user via Google OAuth: id=%s email=%s", user.id, user.email)
+        except Exception:
+            db.rollback()
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to provision user.")
 
     if not user.is_active:
         _audit(db, "google_login_failed", request, user_id=user.id, details={"reason": "account_inactive"})
