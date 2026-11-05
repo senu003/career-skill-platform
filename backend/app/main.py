@@ -16,6 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 logger = logging.getLogger(__name__)
 from .database import engine, SessionLocal, Base
 from . import models
+from .auth_deps import validate_jwt_secret
 from .services.seed_questions import seed_assessment_questions
 from .routers.auth import router as auth_router
 from .routers.users import router as users_router
@@ -24,6 +25,9 @@ from .routers.requirements import router as requirements_router
 from .routers.assessment import router as assessment_router
 from .routers.ml import router as ml_router
 from .routers.aggregation import router as aggregation_router
+
+# Enforce JWT secret configuration immediately on startup
+validate_jwt_secret()
 
 # Schema initialization:
 # In production, migrations must be executed explicitly via Alembic before starting application workers.
@@ -127,4 +131,3 @@ app.include_router(requirements_router)
 app.include_router(assessment_router)
 app.include_router(ml_router)
 app.include_router(aggregation_router)
-

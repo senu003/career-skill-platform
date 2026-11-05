@@ -39,7 +39,15 @@ services:
     command: sh -c "python scripts/run_migrations.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       - DATABASE_URL=${COMPOSE_DATABASE_URL:-postgresql://${POSTGRES_USER:-myuser}:${POSTGRES_PASSWORD:-mypassword}@db:5432/${POSTGRES_DB:-career_skill_db}}
-      - JWT_SECRET=${JWT_SECRET:-career-skill-platform-super-secret-jwt-key-256bits-development-only}
+      - JWT_SECRET=${JWT_SECRET}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-1}
+      - SECURE_EMAIL_DELIVERY_ENABLED=${SECURE_EMAIL_DELIVERY_ENABLED:-0}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MOCK=${GEMINI_MOCK:-0}
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
