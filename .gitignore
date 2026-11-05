@@ -44,8 +44,12 @@ ML_*.md
 WEAKNESS_ML_SPEC.md
 backend/STEP_*.md
 
-# Trained ML model binaries (large binary files - regenerate via training scripts)
+# Trained ML model binaries (champion models required for runtime & CI tests)
 backend/models/*.joblib
+!backend/models/model1_skill_evaluator.joblib
+!backend/models/model2_final_recommendation.joblib
+!backend/models/longitudinal_improvement_model.joblib
+!backend/models/skill_level_model.joblib
 
 # Training / synthetic datasets (generated via ML scripts)
 backend/data/*.csv
