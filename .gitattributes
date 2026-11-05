@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Enforce CRLF on benchmarks so their byte-level SHA-256 matches metadata across platforms
+backend/eval/benchmarks/*.csv text eol=crlf

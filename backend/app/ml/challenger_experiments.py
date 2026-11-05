@@ -80,6 +80,21 @@ MODEL2_BENCHMARK_PATH = BENCHMARKS_DIR / "model2_benchmark_v1.csv"
 # A. PRE-EXPERIMENT CHECKS
 # ==============================================================================
 
+def _matches_benchmark_hash(file_path: Path, expected_sha: str) -> bool:
+    """Verifies SHA-256 against expected hash with cross-platform tolerance for CRLF vs LF in text CSVs."""
+    raw = file_path.read_bytes()
+    # 1. Exact raw byte match
+    if hashlib.sha256(raw).hexdigest() == expected_sha:
+        return True
+    # 2. Normalized LF match (standard Linux checkout)
+    if hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest() == expected_sha:
+        return True
+    # 3. Normalized CRLF match (standard Windows checkout)
+    if hashlib.sha256(raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")).hexdigest() == expected_sha:
+        return True
+    return False
+
+
 def run_pre_experiment_checks() -> Dict[str, Any]:
     """
     Performs Stage 3 pre-experiment verification:
@@ -119,9 +134,9 @@ def run_pre_experiment_checks() -> Dict[str, Any]:
         raise ValueError(f"Model 1 artifact hash mismatch: current {m1_art_sha} vs metadata {m1_meta['artifact_sha256']}")
     if m2_art_sha != m2_meta["artifact_sha256"]:
         raise ValueError(f"Model 2 artifact hash mismatch: current {m2_art_sha} vs metadata {m2_meta['artifact_sha256']}")
-    if m1_bench_sha != m1_meta["evaluation_audit"]["benchmark_sha256"]:
+    if not _matches_benchmark_hash(MODEL1_BENCHMARK_PATH, m1_meta["evaluation_audit"]["benchmark_sha256"]):
         raise ValueError(f"Model 1 benchmark hash mismatch: current {m1_bench_sha} vs metadata {m1_meta['evaluation_audit']['benchmark_sha256']}")
-    if m2_bench_sha != m2_meta["evaluation_audit"]["benchmark_sha256"]:
+    if not _matches_benchmark_hash(MODEL2_BENCHMARK_PATH, m2_meta["evaluation_audit"]["benchmark_sha256"]):
         raise ValueError(f"Model 2 benchmark hash mismatch: current {m2_bench_sha} vs metadata {m2_meta['evaluation_audit']['benchmark_sha256']}")
 
     checks["m1_artifact_sha256_verified"] = m1_art_sha
