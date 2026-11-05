@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext } from 'react';
 import { fetchWithAuth } from '../api';
 
 const AssessmentContext = createContext();
@@ -6,7 +6,7 @@ const AssessmentContext = createContext();
 export function AssessmentProvider({ children }) {
   const [analysisResult, setAnalysisResultState] = useState(() => {
     try {
-      const saved = localStorage.getItem('career_platform_analysis');
+      const saved = sessionStorage.getItem('career_platform_analysis');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -17,12 +17,13 @@ export function AssessmentProvider({ children }) {
     setAnalysisResultState(data);
     try {
       if (data) {
-        localStorage.setItem('career_platform_analysis', JSON.stringify(data));
+        sessionStorage.setItem('career_platform_analysis', JSON.stringify(data));
       } else {
+        sessionStorage.removeItem('career_platform_analysis');
         localStorage.removeItem('career_platform_analysis');
       }
     } catch (e) {
-      console.warn('Failed to save analysis result to localStorage:', e);
+      console.warn('Failed to save analysis result to sessionStorage:', e);
     }
   };
 
@@ -34,24 +35,14 @@ export function AssessmentProvider({ children }) {
 
   const refreshAnalysis = async (targetId = null) => {
     const idToUse = targetId || analysisResult?.analysis_id;
+    if (!idToUse) return null;
+
     setIsRefreshing(true);
     try {
-      if (idToUse) {
-        const detailRes = await fetchWithAuth(`/cv/sessions/${idToUse}`);
-        if (detailRes) {
-          setAnalysisResult(detailRes);
-          return detailRes;
-        }
-      } else {
-        const sessRes = await fetchWithAuth('/cv/sessions');
-        if (sessRes?.sessions && sessRes.sessions.length > 0) {
-          const latestSess = sessRes.sessions[0];
-          const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
-          if (detailRes) {
-            setAnalysisResult(detailRes);
-            return detailRes;
-          }
-        }
+      const detailRes = await fetchWithAuth(`/cv/sessions/${idToUse}`);
+      if (detailRes) {
+        setAnalysisResult(detailRes);
+        return detailRes;
       }
     } catch (err) {
       console.warn('Could not refresh analysis session:', err);
@@ -115,39 +106,6 @@ export function AssessmentProvider({ children }) {
     return Promise.resolve(newResult);
   };
 
-  // Auto-restore latest session from API if no active analysis in memory/localStorage
-  useEffect(() => {
-    let isCancelled = false;
-    if (!analysisResult) {
-      const fetchLatestSession = async () => {
-        try {
-          const sessRes = await fetchWithAuth('/cv/sessions');
-          if (isCancelled) return;
-          if (sessRes?.sessions && sessRes.sessions.length > 0) {
-            const latestSess = sessRes.sessions[0];
-            const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
-            if (isCancelled) return;
-            if (detailRes) {
-              setAnalysisResultState((prev) => {
-                // Never overwrite a freshly set or active analysis
-                if (prev) return prev;
-                try {
-                  localStorage.setItem('career_platform_analysis', JSON.stringify(detailRes));
-                } catch {}
-                return detailRes;
-              });
-            }
-          }
-        } catch (err) {
-          console.warn('Could not auto-restore latest session:', err);
-        }
-      };
-      fetchLatestSession();
-    }
-    return () => {
-      isCancelled = true;
-    };
-  }, [analysisResult]);
 
   return (
     <AssessmentContext.Provider value={{ analysisResult, setAnalysisResult, updateSkillResult, clearAnalysis, refreshAnalysis, isRefreshing }}>

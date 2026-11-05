@@ -1,14 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
 
 from ..services.requirement_service import extract_requirements
 from ..rate_limiter import limiter, RATE_LIMIT_REQUIREMENTS_ANALYZE
+from app.schemas.requirements import RequirementRequest
 
 router = APIRouter()
 
-
-class RequirementRequest(BaseModel):
-    text: str
 
 
 @router.post("/requirements/analyze")

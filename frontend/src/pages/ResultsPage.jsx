@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, RotateCcw, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  RotateCcw,
+  RefreshCw,
+  Lightbulb,
+  BookOpen,
+  Target,
+  Sparkles,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Compass
+} from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
@@ -17,7 +33,8 @@ export default function ResultsPage() {
   const { skill, attemptId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { analysisResult, setAnalysisResult, updateSkillResult } = useAssessment();
+  const { analysisResult } = useAssessment();
+
 
   const queryAttemptId = searchParams.get('attempt_id') || searchParams.get('attemptId');
   const analysisId = searchParams.get('analysis_id') || analysisResult?.analysis_id;
@@ -25,68 +42,128 @@ export default function ResultsPage() {
   const rawSkill = skill ? decodeURIComponent(skill) : '';
 
   const [resultData, setResultData] = useState(null);
-  const normalizedSkill = rawSkill || resultData?.skill || '';
-  const [loading, setLoading] = useState(true);
+  const [reviewData, setReviewData] = useState(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [weaknessData, setWeaknessData] = useState(null);
+  const [reviewFilter, setReviewFilter] = useState('all'); // 'all' | 'incorrect' | 'correct'
+  const [expandedQuestions, setExpandedQuestions] = useState({});
+
+  const hasResultRef = React.useRef(false);
+  const hasReviewRef = React.useRef(false);
+
+  const fallbackSkill = React.useMemo(() => {
+    const skills = analysisResult?.skills || [];
+    const assessed = skills.find((s) => s.assessed_level) || skills[0];
+    return assessed?.skill || '';
+  }, [analysisResult]);
+
+  const normalizedSkill = rawSkill || resultData?.skill || fallbackSkill || '';
+  const [loading, setLoading] = useState(!resultData);
   const [error, setError] = useState(null);
 
-  // Auto-restore latest session from backend if analysisResult is empty
-  useEffect(() => {
-    let isCancelled = false;
-    if (!analysisResult) {
-      const restoreLatestSession = async () => {
-        try {
-          const sessRes = await fetchWithAuth('/cv/sessions');
-          if (isCancelled) return;
-          if (sessRes?.sessions && sessRes.sessions.length > 0) {
-            const latestSess = sessRes.sessions[0];
-            const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
-            if (isCancelled) return;
-            if (detailRes) {
-              setAnalysisResult(detailRes);
+  const fetchResult = React.useCallback(async () => {
+    let effectiveSkill = rawSkill;
+    let effectiveAttempt = targetAttemptId;
+
+    if (!effectiveSkill && !effectiveAttempt) {
+      effectiveSkill = fallbackSkill;
+    }
+
+    // If still no skill or attempt, attempt auto-resolution from user's latest assessment history
+    if (!effectiveSkill && !effectiveAttempt) {
+      try {
+        const hist = await fetchWithAuth('/assessment/history/me');
+        if (hist && typeof hist === 'object') {
+          let latestObs = null;
+          Object.entries(hist).forEach(([sk, obsList]) => {
+            if (Array.isArray(obsList)) {
+              obsList.forEach((obs) => {
+                if (!latestObs || new Date(obs.timestamp) > new Date(latestObs.timestamp)) {
+                  latestObs = { ...obs, skill: sk };
+                }
+              });
+            }
+          });
+          if (latestObs) {
+            effectiveSkill = latestObs.skill;
+            if (latestObs.attempt_id) {
+              effectiveAttempt = latestObs.attempt_id;
             }
           }
-        } catch (err) {
-          console.warn('Could not restore session on ResultsPage:', err);
         }
-      };
-      restoreLatestSession();
+      } catch (histErr) {
+        console.warn('Could not auto-resolve from assessment history:', histErr);
+      }
     }
-    return () => {
-      isCancelled = true;
-    };
-  }, [analysisResult, setAnalysisResult]);
 
-  const fetchResult = React.useCallback(async () => {
-    if (!rawSkill && !targetAttemptId) {
-      setError('No skill or attempt specified.');
+    if (!effectiveSkill && !effectiveAttempt) {
+      setError('No skill or attempt specified. Complete an assessment to view detailed review and results.');
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    // Only display full-screen loading spinner if we don't have results yet
+    if (!hasResultRef.current) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
       let endpoint;
-      if (targetAttemptId) {
-        endpoint = `/assessment/${targetAttemptId}/result`;
+      if (effectiveAttempt) {
+        endpoint = `/assessment/${effectiveAttempt}/result`;
       } else {
-        endpoint = `/assessment/result/${encodeURIComponent(rawSkill)}${
+        endpoint = `/assessment/result/${encodeURIComponent(effectiveSkill)}${
           analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : ''
         }`;
       }
 
       const data = await fetchWithAuth(endpoint);
       setResultData(data);
-      if (updateSkillResult && data?.skill) {
-        await updateSkillResult(data.skill, data);
+      hasResultRef.current = true;
+
+      // Fetch Question-by-Question Review if attempt_id is available
+      const effectiveAttemptId = effectiveAttempt || data?.attempt_id;
+      if (effectiveAttemptId) {
+        try {
+          if (!hasReviewRef.current) {
+            setReviewLoading(true);
+          }
+          const rev = await fetchWithAuth(`/assessment/${effectiveAttemptId}/review`);
+          setReviewData(rev);
+          hasReviewRef.current = true;
+
+          // Preserve user's collapse/expand states; only initialize if empty
+          if (rev?.questions) {
+            setExpandedQuestions((prev) => {
+              if (prev && Object.keys(prev).length > 0) return prev;
+              const initialExpanded = {};
+              rev.questions.forEach((q) => {
+                initialExpanded[q.question_id] = true;
+              });
+              return initialExpanded;
+            });
+          }
+        } catch (revErr) {
+          console.warn('Could not load review:', revErr);
+        } finally {
+          setReviewLoading(false);
+        }
+      }
+
+      // Fetch personal weakness analysis
+      try {
+        const weak = await fetchWithAuth('/assessment/revision/weaknesses');
+        setWeaknessData(weak);
+      } catch (weakErr) {
+        console.warn('Could not load weaknesses:', weakErr);
       }
     } catch (err) {
       setError(err.message || 'Failed to load assessment result.');
     } finally {
       setLoading(false);
     }
-  }, [rawSkill, targetAttemptId, analysisId, updateSkillResult]);
+  }, [rawSkill, targetAttemptId, analysisId, fallbackSkill]);
 
   useEffect(() => {
     fetchResult();
@@ -211,6 +288,26 @@ export default function ResultsPage() {
   const confidenceDisplay = formatConfidence(resultData.recommendation_confidence);
   const isMastered = (recommendationLabel || '').toLowerCase().trim() === 'mastered';
 
+  const reviewQuestions = reviewData?.questions || [];
+  const correctCount = reviewQuestions.filter((q) => q.is_correct).length;
+  const incorrectCount = reviewQuestions.length - correctCount;
+
+  const filteredQuestions = reviewQuestions.filter((q) => {
+    if (reviewFilter === 'correct') return q.is_correct;
+    if (reviewFilter === 'incorrect') return !q.is_correct;
+    return true;
+  });
+
+  const currentSkillName = (resultData?.skill || rawSkill || '').toLowerCase();
+  const currentSkillWeakTopics = (weaknessData?.weak_topics || []).filter((w) => {
+    const s = (w.skill || '').toLowerCase();
+    return (
+      s === currentSkillName ||
+      (currentSkillName === 'sql' && s === 'postgresql') ||
+      (currentSkillName === 'postgresql' && s === 'sql')
+    );
+  });
+
   return (
     <div className="assessment-container fade-in" style={{ maxWidth: '720px', margin: '0 auto' }}>
       {/* 1. Header */}
@@ -231,6 +328,23 @@ export default function ResultsPage() {
             ? `Completed on ${new Date(resultData.completed_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
             : 'Technical assessment score and evaluation summary'}
         </p>
+        <button
+          onClick={() => navigate(`/interview-prep/skill/${encodeURIComponent(resultData.skill || rawSkill)}`)}
+          className="btn btn-outline text-xs mt-3"
+          style={{
+            margin: '0.65rem auto 0',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            borderColor: '#bfdbfe',
+            color: '#1d4ed8',
+            backgroundColor: '#eff6ff',
+          }}
+        >
+          <Compass size={14} />
+          <span>Open in Interview Prep Hub</span>
+        </button>
       </div>
 
       {/* 2. Main Scorecard */}
@@ -357,6 +471,528 @@ export default function ResultsPage() {
             {explanationText}
           </p>
         </div>
+
+        {/* 4. TARGETED REVISION & WEAKNESS RECOMMENDATIONS */}
+        <div
+          style={{
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 'var(--radius-sm)',
+            padding: '1.25rem 1.5rem',
+            marginBottom: '1.75rem',
+          }}
+        >
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  backgroundColor: '#fee2e2',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Target size={16} />
+              </div>
+              <div>
+                <h3 className="font-bold text-main text-base" style={{ margin: 0 }}>
+                  Targeted Revision Recommendations
+                </h3>
+                <span className="text-xs text-muted">
+                  Rule-based weakness identification and explainable practice paths
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {currentSkillWeakTopics && currentSkillWeakTopics.length > 0 ? (
+            <div className="flex flex-col gap-2.5 mt-2">
+              {currentSkillWeakTopics.map((topicItem, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #fecaca',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.85rem 1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: '220px' }}>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-bold text-sm text-main">{topicItem.topic}</span>
+                      <span
+                        className="badge"
+                        style={{
+                          backgroundColor: '#fee2e2',
+                          color: '#991b1b',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Needs Revision
+                      </span>
+                      {topicItem.priority === 'high' && (
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor: '#fef2f2',
+                            color: '#b91c1c',
+                            border: '1px solid #fca5a5',
+                            fontSize: '0.68rem',
+                          }}
+                        >
+                          High Priority
+                        </span>
+                      )}
+                      <span className="text-xs text-muted">
+                        Accuracy: {Math.round(topicItem.accuracy_pct || topicItem.accuracy * 100)}% ({topicItem.incorrect_count} missed)
+                      </span>
+                    </div>
+                    <p className="text-xs text-body" style={{ margin: 0, color: '#475569' }}>
+                      {topicItem.reason || topicItem.recommendation}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      navigate(
+                        `/assessment/${encodeURIComponent(topicItem.skill)}?topic=${encodeURIComponent(
+                          topicItem.topic
+                        )}${analysisId ? `&analysis_id=${encodeURIComponent(analysisId)}` : ''}`
+                      )
+                    }
+                    className="btn btn-outline text-xs flex items-center gap-1.5"
+                    style={{
+                      borderColor: 'var(--primary-600)',
+                      color: 'var(--primary-700)',
+                      backgroundColor: '#eff6ff',
+                      fontWeight: 600,
+                      padding: '0.45rem 0.85rem',
+                    }}
+                    title={`Practice questions on ${topicItem.topic}`}
+                  >
+                    <span>Practice Topic</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              style={{
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.75rem 1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                color: '#166534',
+                fontSize: '0.85rem',
+              }}
+            >
+              <CheckCircle2 size={16} />
+              <span>
+                No weak topics detected for this skill! All tested concepts demonstrated strong performance.
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* 5. QUESTION-BY-QUESTION REVIEW WITH EXPLANATIONS */}
+        {reviewLoading && !reviewData ? (
+          <div className="card text-center p-5 mb-6" style={{ padding: '2rem' }}>
+            <div className="spinner spinner-dark mb-2" style={{ width: 24, height: 24 }}></div>
+            <p className="text-xs text-muted">Loading detailed question review...</p>
+          </div>
+        ) : reviewQuestions.length > 0 ? (
+          <div style={{ marginBottom: '1.75rem' }}>
+            {/* Review Section Header & Filters */}
+            <div
+              className="flex items-center justify-between gap-3 mb-4 pb-2 flex-wrap"
+              style={{ borderBottom: '1px solid #e2e8f0' }}
+            >
+              <div className="flex items-center gap-2">
+                <BookOpen size={18} style={{ color: 'var(--primary-600)' }} />
+                <h3 className="font-bold text-main text-base" style={{ margin: 0 }}>
+                  Question-by-Question Review
+                </h3>
+                <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.75rem' }}>
+                  {reviewQuestions.length} Questions
+                </span>
+              </div>
+
+              {/* Filter Tabs & Toggle */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div
+                  style={{
+                    display: 'flex',
+                    backgroundColor: '#f1f5f9',
+                    padding: '2px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  <button
+                    onClick={() => setReviewFilter('all')}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      backgroundColor: reviewFilter === 'all' ? '#ffffff' : 'transparent',
+                      color: reviewFilter === 'all' ? '#0f172a' : '#64748b',
+                      boxShadow: reviewFilter === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    All ({reviewQuestions.length})
+                  </button>
+                  <button
+                    onClick={() => setReviewFilter('incorrect')}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      backgroundColor: reviewFilter === 'incorrect' ? '#ffffff' : 'transparent',
+                      color: reviewFilter === 'incorrect' ? '#dc2626' : '#64748b',
+                      boxShadow: reviewFilter === 'incorrect' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    Incorrect ({incorrectCount})
+                  </button>
+                  <button
+                    onClick={() => setReviewFilter('correct')}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      backgroundColor: reviewFilter === 'correct' ? '#ffffff' : 'transparent',
+                      color: reviewFilter === 'correct' ? '#16a34a' : '#64748b',
+                      boxShadow: reviewFilter === 'correct' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    Correct ({correctCount})
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const allExpanded = Object.values(expandedQuestions).every(Boolean);
+                    if (allExpanded) {
+                      setExpandedQuestions({});
+                    } else {
+                      const all = {};
+                      reviewQuestions.forEach((q) => {
+                        all[q.question_id] = true;
+                      });
+                      setExpandedQuestions(all);
+                    }
+                  }}
+                  className="btn btn-outline text-xs"
+                  style={{ padding: '0.3rem 0.6rem', fontSize: '0.72rem' }}
+                >
+                  {Object.values(expandedQuestions).every(Boolean) ? 'Collapse All' : 'Expand All'}
+                </button>
+              </div>
+            </div>
+
+            {/* Questions List */}
+            <div className="flex flex-col gap-3">
+              {filteredQuestions.map((q, idx) => {
+                const isExpanded = expandedQuestions[q.question_id] ?? true;
+                const optionsEntries = Object.entries(q.options || {});
+
+                return (
+                  <div
+                    key={q.question_id || idx}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      border: `1.5px solid ${q.is_correct ? '#bbf7d0' : '#fecaca'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {/* Question Header Bar */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setExpandedQuestions((prev) => ({
+                          ...prev,
+                          [q.question_id]: !prev[q.question_id],
+                        }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setExpandedQuestions((prev) => ({
+                            ...prev,
+                            [q.question_id]: !prev[q.question_id],
+                          }));
+                        }
+                      }}
+                      style={{
+                        padding: '0.85rem 1rem',
+                        backgroundColor: q.is_correct ? '#f0fdf4' : '#fef2f2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 22,
+                            height: 22,
+                            borderRadius: '50%',
+                            backgroundColor: q.is_correct ? '#dcfce7' : '#fee2e2',
+                            color: q.is_correct ? '#16a34a' : '#dc2626',
+                          }}
+                        >
+                          {q.is_correct ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+                        </div>
+                        <span className="font-bold text-sm text-main">
+                          Q{idx + 1}. {q.topic || q.skill}
+                        </span>
+                        {q.level && (
+                          <span
+                            className="badge"
+                            style={{
+                              backgroundColor: '#e2e8f0',
+                              color: '#334155',
+                              fontSize: '0.68rem',
+                            }}
+                          >
+                            {formatLevel(q.level)}
+                          </span>
+                        )}
+                        {q.time_taken !== null && q.time_taken !== undefined && (
+                          <span
+                            className="text-xs text-muted flex items-center gap-1"
+                            style={{ fontSize: '0.72rem' }}
+                          >
+                            <Clock size={12} />
+                            <span>{Math.round(q.time_taken)}s</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor: q.is_correct ? '#dcfce7' : '#fee2e2',
+                            color: q.is_correct ? '#166534' : '#991b1b',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {q.is_correct ? 'Correct' : 'Incorrect'}
+                        </span>
+                        <div style={{ color: '#64748b' }}>
+                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Question Content (Collapsible) */}
+                    {isExpanded && (
+                      <div style={{ padding: '1rem 1.25rem' }}>
+                        {/* Question Prompt */}
+                        <p
+                          className="font-semibold text-main text-sm mb-3"
+                          style={{ lineHeight: 1.5, margin: '0 0 0.85rem' }}
+                        >
+                          {q.question}
+                        </p>
+
+                        {/* Options Grid */}
+                        <div className="flex flex-col gap-1.5 mb-3">
+                          {optionsEntries.map(([optKey, optText]) => {
+                            const isUserChoice = (q.selected_answer || '').toUpperCase() === optKey.toUpperCase();
+                            const isCorrectChoice = (q.correct_answer || '').toUpperCase() === optKey.toUpperCase();
+
+                            let bgColor = '#ffffff';
+                            let borderColor = '#e2e8f0';
+                            let textColor = '#334155';
+                            let indicator = null;
+
+                            if (isUserChoice && q.is_correct) {
+                              bgColor = '#f0fdf4';
+                              borderColor = '#86efac';
+                              textColor = '#166534';
+                              indicator = (
+                                <span className="flex items-center gap-1 text-xs font-semibold text-green-700">
+                                  <CheckCircle2 size={13} /> Your Answer (Correct)
+                                </span>
+                              );
+                            } else if (isUserChoice && !q.is_correct) {
+                              bgColor = '#fef2f2';
+                              borderColor = '#fca5a5';
+                              textColor = '#991b1b';
+                              indicator = (
+                                <span className="flex items-center gap-1 text-xs font-semibold text-red-700">
+                                  <XCircle size={13} /> Your Answer (Incorrect)
+                                </span>
+                              );
+                            } else if (isCorrectChoice && !q.is_correct) {
+                              bgColor = '#f0fdf4';
+                              borderColor = '#86efac';
+                              textColor = '#166534';
+                              indicator = (
+                                <span className="flex items-center gap-1 text-xs font-semibold text-green-700">
+                                  <CheckCircle2 size={13} /> Correct Answer
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={optKey}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '0.55rem 0.85rem',
+                                  borderRadius: '6px',
+                                  backgroundColor: bgColor,
+                                  border: `1.5px solid ${borderColor}`,
+                                  fontSize: '0.82rem',
+                                  color: textColor,
+                                  gap: '0.5rem',
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    style={{
+                                      width: 20,
+                                      height: 20,
+                                      borderRadius: '4px',
+                                      backgroundColor: isCorrectChoice ? '#bbf7d0' : isUserChoice ? '#fecaca' : '#f1f5f9',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 700,
+                                      fontSize: '0.72rem',
+                                    }}
+                                  >
+                                    {optKey}
+                                  </span>
+                                  <span>{optText}</span>
+                                </div>
+                                {indicator}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* RATIONALE & INSIGHTS CARDS */}
+                        <div className="flex flex-col gap-2 mt-3 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
+                          {/* 1. Explanation */}
+                          {q.explanation && (
+                            <div
+                              style={{
+                                backgroundColor: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '6px',
+                                padding: '0.65rem 0.85rem',
+                                display: 'flex',
+                                gap: '0.5rem',
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <Lightbulb size={15} style={{ color: '#0284c7', marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span className="font-bold text-xs" style={{ color: '#0369a1' }}>
+                                  Explanation:{' '}
+                                </span>
+                                <span className="text-xs" style={{ color: '#334155', lineHeight: 1.45 }}>
+                                  {q.explanation}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 2. Misconception */}
+                          {q.misconception && (
+                            <div
+                              style={{
+                                backgroundColor: '#fffbeb',
+                                border: '1px solid #fde68a',
+                                borderRadius: '6px',
+                                padding: '0.65rem 0.85rem',
+                                display: 'flex',
+                                gap: '0.5rem',
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <AlertCircle size={15} style={{ color: '#d97706', marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span className="font-bold text-xs" style={{ color: '#b45309' }}>
+                                  Common Misconception:{' '}
+                                </span>
+                                <span className="text-xs" style={{ color: '#78350f', lineHeight: 1.45 }}>
+                                  {q.misconception}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. Interview Tip */}
+                          {q.interview_tip && (
+                            <div
+                              style={{
+                                backgroundColor: '#f0fdf4',
+                                border: '1px solid #bbf7d0',
+                                borderRadius: '6px',
+                                padding: '0.65rem 0.85rem',
+                                display: 'flex',
+                                gap: '0.5rem',
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <Sparkles size={15} style={{ color: '#16a34a', marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <span className="font-bold text-xs" style={{ color: '#15803d' }}>
+                                  Interview Pro-Tip:{' '}
+                                </span>
+                                <span className="text-xs" style={{ color: '#14532d', lineHeight: 1.45 }}>
+                                  {q.interview_tip}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {/* Action Bar: Back to Grid, Retake, and Single Next Skill Button */}
         <div

@@ -1,25 +1,32 @@
 # Build stage
-FROM node:20-alpine as build
+FROM node:20-alpine AS build
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+
+# Copy lockfile and package descriptor for reproducible install
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy frontend source files
 COPY . .
-ARG VITE_API_BASE_URL
+
+# Build application with API base URL argument
+ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 # Production stage
 FROM nginx:alpine
+
+# Copy built static assets
 COPY --from=build /app/dist /usr/share/nginx/html
-# Custom nginx config to support React Router SPA (fallback to index.html)
-RUN echo 'server { \
-    listen 80; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+
+# Copy optimized nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]

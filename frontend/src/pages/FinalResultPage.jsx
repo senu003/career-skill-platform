@@ -1,163 +1,44 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  CheckCircle2, 
-  AlertCircle, 
-  AlertTriangle, 
-  TrendingUp, 
-  Sparkles, 
-  BookOpen, 
-  ArrowLeft, 
-  RefreshCw, 
-  HelpCircle, 
+import {
+  Sparkles,
+  ArrowLeft,
+  RefreshCw,
   RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  Target,
+  Cpu,
+  Lightbulb,
+  FileText,
   Copy,
   Check,
   ChevronDown,
   ChevronUp,
-  FileText,
-  MessageSquare,
-  Layers
+  BookOpen,
+  Award,
+  TrendingUp,
+  Zap,
+  HelpCircle,
+  Layers,
+  ArrowRight,
+  ShieldCheck,
+  Flame,
+  CheckCircle,
+  Brain,
 } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
-
-// Domain-specific technical study concept mappings for targeted preparation
-const TECHNICAL_STUDY_CONCEPTS = {
-  'javascript': {
-    'advanced': ['Asynchronous Patterns (Promises, Async/Await, Microtasks)', 'Event Loop & Execution Context', 'Closures, Scope Chains & Lexical Environment', 'Prototypes, Classes, & Memory Management'],
-    'intermediate': ['Array Methods (map, filter, reduce)', 'DOM Manipulation & Event Bubbling', 'Fetch API & JSON Handling', 'ES6+ Syntax & Destructuring'],
-    'basic': ['Variables (let/const) & Data Types', 'Conditional Logic & Functions', 'Loops & Basic Arrays', 'Basic String & Number Methods'],
-    'default': ['Asynchronous JavaScript & Event Loop', 'Core Language Mechanics & Scope', 'Modern ES6+ Syntax & Patterns']
-  },
-  'react': {
-    'advanced': ['Component Lifecycle & Custom Hooks Design', 'Memoization & Rendering Performance (useMemo, useCallback)', 'State Architecture & Context Optimization', 'Concurrent Features & Code Splitting'],
-    'intermediate': ['State & Props Management (useState, useEffect)', 'Controlled Forms & Form Validation', 'Component Composition & Reusability', 'Routing & API Integration'],
-    'basic': ['JSX Syntax & Element Rendering', 'Functional Components', 'Basic Props & Event Handling', 'Simple State Updates'],
-    'default': ['React Hooks & Performance Optimization', 'State Architecture & Component Patterns']
-  },
-  'typescript': {
-    'advanced': ['Conditional & Mapped Types', 'Generics & Utility Types (Pick, Omit, Record)', 'Strict Null Checking & Type Narrowing', 'Type-Safe API Contracts & Decorators'],
-    'intermediate': ['Interfaces vs Type Aliases', 'Union & Intersection Types', 'Typing React Components & Hooks', 'Enums & Type Assertions'],
-    'basic': ['Primitive Types & Type Annotations', 'Basic Object & Array Typing', 'Function Parameter & Return Types'],
-    'default': ['Generics & Advanced Type System', 'Type Narrowing & Interface Contracts']
-  },
-  'python': {
-    'advanced': ['Metaclasses, Decorators, & Dunder Methods', 'Asyncio & Concurrency (Threads vs Processes)', 'Memory Profiling & Generator Pipelines', 'Packaging & Type Hinting (typing module)'],
-    'intermediate': ['List/Dict Comprehensions & Generators', 'OOP: Inheritance & Polymorphism', 'Error Handling & Context Managers (with)', 'Virtual Environments & Dependencies'],
-    'basic': ['Variables, Lists, Tuples & Dictionaries', 'Functions & Parameter Passing', 'Basic File I/O & String Operations'],
-    'default': ['Pythonic Idioms & Data Structures', 'OOP, Generators, & Error Handling']
-  },
-  'postgresql': {
-    'advanced': ['Query Plan Analysis (EXPLAIN ANALYZE)', 'Indexing Strategies (B-Tree, GIN, Partial Indexes)', 'Transactions & ACID Isolation Levels', 'Partitioning, Replication, & Connection Pooling'],
-    'intermediate': ['Complex Joins (INNER, LEFT, FULL)', 'Aggregation & Window Functions', 'Foreign Keys, Constraints, & Cascades', 'Schema Migrations & Indexing Basics'],
-    'basic': ['Basic CRUD Queries (SELECT, INSERT, UPDATE, DELETE)', 'WHERE Filters & ORDER BY', 'Basic Primary Keys & Tables'],
-    'default': ['Indexing & Query Performance Tuning', 'Window Functions & Transaction Isolation']
-  },
-  'docker': {
-    'default': ['Multi-Stage Dockerfiles for Production', 'Container Networking & Bridge Networks', 'Volume Persistence & Bind Mounts', 'Docker Compose Service Orchestration']
-  },
-  'aws': {
-    'default': ['IAM Security Policies & Least Privilege Roles', 'S3 Bucket Configuration & CloudFront Distribution', 'EC2 / ECS Container Deployment', 'VPC Fundamentals & Security Groups']
-  }
-};
-
-// Interview Question Forecast Generator based on skills & levels
-const getInterviewQuestions = (skillsList, gapsList) => {
-  const questions = [];
-
-  // Question 1: Focused on confirmed gap or lowest scoring skill
-  const primaryGap = gapsList[0] || skillsList.find(s => s.total_score !== null && s.total_score < 0.5) || skillsList[0];
-  if (primaryGap) {
-    const sName = primaryGap.skill.toLowerCase();
-    if (sName.includes('javascript')) {
-      questions.push({
-        topic: 'JavaScript Mechanics (High Probability)',
-        question: 'Can you explain the execution order between microtasks (Promises, queueMicrotask) and macrotasks (setTimeout, I/O) in the JavaScript event loop?',
-        hint: 'Interviewers look for understanding of why Promise.then() runs before setTimeout(..., 0).'
-      });
-    } else if (sName.includes('react')) {
-      questions.push({
-        topic: 'React Architecture (High Probability)',
-        question: 'How do you diagnose and prevent unnecessary re-renders in a deeply nested React component tree when using global state?',
-        hint: 'Discuss useMemo, useCallback, React.memo, and state co-location.'
-      });
-    } else if (sName.includes('python')) {
-      questions.push({
-        topic: 'Python Concurrency (High Probability)',
-        question: 'How does the Global Interpreter Lock (GIL) impact CPU-bound multi-threading in Python, and how would you bypass it for concurrent tasks?',
-        hint: 'Mention multiprocessing, asyncio for I/O bound tasks, and native C extensions.'
-      });
-    } else {
-      questions.push({
-        topic: `${primaryGap.skill} Core Standard (High Probability)`,
-        question: `How do you structure production-grade architecture and error-handling in ${primaryGap.skill} at an enterprise level?`,
-        hint: 'Emphasize reliability, logging, clean interfaces, and edge-case handling.'
-      });
-    }
-  }
-
-  // Question 2: Focused on second key required skill or architecture
-  const secondSkill = skillsList.find(s => s.skill.toLowerCase() !== primaryGap?.skill.toLowerCase() && (s.importance || 'required').toLowerCase() !== 'preferred') || skillsList[1];
-  if (secondSkill) {
-    const sName = secondSkill.skill.toLowerCase();
-    if (sName.includes('typescript')) {
-      questions.push({
-        topic: 'TypeScript Type Safety',
-        question: 'How do you type unknown external API responses safely using generics and type guards rather than resorting to any?',
-        hint: 'Discuss the unknown type, Zod / custom type guards, and discriminated unions.'
-      });
-    } else if (sName.includes('postgres') || sName.includes('sql')) {
-      questions.push({
-        topic: 'Database Performance',
-        question: 'When a critical query slows down under high traffic, what steps do you take with EXPLAIN ANALYZE to identify index bottlenecks?',
-        hint: 'Look for Seq Scans vs Index Scans, cost estimates, and high row filter percentages.'
-      });
-    } else {
-      questions.push({
-        topic: `${secondSkill.skill} Best Practices`,
-        question: `What patterns do you implement in ${secondSkill.skill} to ensure high testability, maintainability, and code quality?`,
-        hint: 'Focus on separation of concerns, automated unit testing, and dependency injection.'
-      });
-    }
-  }
-
-  // Question 3: System Design / Practical Integration question
-  questions.push({
-    topic: 'Full-Stack Integration & Reliability',
-    question: 'How do you handle graceful degradation and retry strategies when backend API services or database queries experience transient latency spikes?',
-    hint: 'Mention exponential backoff with jitter, circuit breakers, optimistic UI updates, and caching.'
-  });
-
-  return questions;
-};
-
-// Helper to format level
-const formatLevel = (lvl) => {
-  if (!lvl) return 'N/A';
-  const clean = String(lvl).trim().toLowerCase();
-  if (clean === 'unspecified' || clean === 'none') return 'Any Level';
-  return clean.charAt(0).toUpperCase() + clean.slice(1);
-};
-
-// Helper to format score
-const formatScore = (score) => {
-  if (score === null || score === undefined) return null;
-  if (typeof score === 'number') {
-    return `${Math.round(score > 1 ? score : score * 100)}%`;
-  }
-  return score;
-};
-
-// Helper to format confidence
-const formatConfidence = (conf) => {
-  if (conf === null || conf === undefined) return null;
-  const num = typeof conf === 'number' ? conf : parseFloat(conf);
-  if (isNaN(num)) return null;
-  const percent = Math.round(num > 1 ? num : num * 100);
-  return `${percent}%`;
-};
+import SkillMatchTable from '../components/SkillMatchTable';
+import {
+  formatLevel,
+  translateRequiredLevel,
+  translateCvLevel,
+  formatScore,
+  formatConfidence,
+} from '../utils/formatters';
 
 export default function FinalResultPage() {
   const navigate = useNavigate();
@@ -167,29 +48,43 @@ export default function FinalResultPage() {
   const urlAnalysisId = searchParams.get('analysis_id');
   const activeAnalysisId = urlAnalysisId || analysisResult?.analysis_id;
 
+  // Backend Data States
   const [aggregationData, setAggregationData] = useState(null);
   const [loadingAgg, setLoadingAgg] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
 
-  // Expandable state for CV suggestion drawer and interview questions
+  // Weakness / Question Diagnostics State (from /assessment/revision/weaknesses)
+  const [weaknessData, setWeaknessData] = useState(null);
+  const [loadingWeakness, setLoadingWeakness] = useState(false);
+
+  // Model 1 Skill Filter State
+  const [model1Filter, setModel1Filter] = useState('All');
+
+  // Supported skills list
+  const [supportedSkillsList, setSupportedSkillsList] = useState([]);
+
+  // Copyable bullet state
   const [expandedCvSuggest, setExpandedCvSuggest] = useState({});
   const [copiedKey, setCopiedKey] = useState(null);
 
-  const toggleCvSuggest = (key) => {
-    setExpandedCvSuggest(prev => ({ ...prev, [key]: !prev[key] }));
-  };
+  // 1. Fetch Supported Skills
+  useEffect(() => {
+    let isMounted = true;
+    const fetchSupportedSkills = async () => {
+      try {
+        const res = await fetchWithAuth('/assessment/supported-skills');
+        if (isMounted && res && Array.isArray(res.supported_skills)) {
+          setSupportedSkillsList(res.supported_skills);
+        }
+      } catch (err) {
+        console.warn('Could not fetch supported skills list:', err);
+      }
+    };
+    fetchSupportedSkills();
+    return () => { isMounted = false; };
+  }, []);
 
-  const handleCopyText = async (key, text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 2000);
-    } catch (e) {
-      console.warn('Copy failed', e);
-    }
-  };
-
-  // Auto-restore session from backend if urlAnalysisId provided OR if analysisResult is empty
+  // 2. Load Session Detail if URL analysis_id is provided
   useEffect(() => {
     let isCancelled = false;
     if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
@@ -207,41 +102,36 @@ export default function FinalResultPage() {
         }
       };
       fetchSession();
-    } else if (!analysisResult) {
-      const restoreLatestSession = async () => {
-        setLoadingAgg(true);
-        try {
-          const sessRes = await fetchWithAuth('/cv/sessions');
-          if (isCancelled) return;
-          if (sessRes?.sessions && sessRes.sessions.length > 0) {
-            const latestSess = urlAnalysisId
-              ? sessRes.sessions.find(s => String(s.analysis_id) === String(urlAnalysisId)) || sessRes.sessions[0]
-              : sessRes.sessions[0];
-            const detailRes = await fetchWithAuth(`/cv/sessions/${latestSess.analysis_id}`);
-            if (isCancelled) return;
-            if (detailRes) {
-              setAnalysisResult(detailRes);
-            }
-          }
-        } catch (err) {
-          console.warn('Could not restore latest session:', err);
-        } finally {
-          if (!isCancelled) setLoadingAgg(false);
-        }
-      };
-      restoreLatestSession();
     }
-    return () => {
-      isCancelled = true;
-    };
-  }, [analysisResult, urlAnalysisId, setAnalysisResult]);
+    return () => { isCancelled = true; };
+  }, [urlAnalysisId, analysisResult?.analysis_id, setAnalysisResult]);
 
+  // 3. Extract Skills List
   const skillsList = useMemo(() => analysisResult?.skills || [
     ...(analysisResult?.matched_skills || []),
     ...(analysisResult?.missing_skills || []),
   ] || [], [analysisResult]);
 
-  // Fetch backend aggregation stats when analysisResult is present
+  // 4. Fetch Question-Level Weakness Diagnostics
+  const fetchWeaknessData = useCallback(async () => {
+    setLoadingWeakness(true);
+    try {
+      const res = await fetchWithAuth('/assessment/revision/weaknesses');
+      if (res) {
+        setWeaknessData(res);
+      }
+    } catch (err) {
+      console.warn('Could not fetch quiz weakness diagnostics:', err);
+    } finally {
+      setLoadingWeakness(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWeaknessData();
+  }, [fetchWeaknessData]);
+
+  // 5. Fetch Backend Aggregation Metrics (Model 2 + Model 1 counts)
   const fetchAggregation = useCallback(async () => {
     if (!skillsList || skillsList.length === 0) return;
     setLoadingAgg(true);
@@ -277,7 +167,7 @@ export default function FinalResultPage() {
       });
       setAggregationData(res);
     } catch (err) {
-      console.error('Failed to fetch backend aggregation stats:', err);
+      console.error('Failed to fetch backend aggregation metrics:', err);
       setRefreshError('Unable to refresh aggregated metrics. Displaying cached session results.');
     } finally {
       setLoadingAgg(false);
@@ -294,77 +184,26 @@ export default function FinalResultPage() {
     if (activeAnalysisId) {
       await refreshAnalysis(activeAnalysisId);
     }
-    await fetchAggregation();
+    await Promise.all([fetchAggregation(), fetchWeaknessData()]);
   };
 
-  // 1. VERIFIED STRENGTHS: Tested and scored >= 70% or met required level
-  const verifiedStrengths = useMemo(() => skillsList.filter((s) => {
-    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
-    if (!isAssessed) return false;
-    return !s.is_weakness && (s.level_gap === null || s.level_gap <= 0) && (s.total_score === null || s.total_score >= 0.50);
-  }), [skillsList]);
-
-  // 2. INTERVIEW BLOCKERS & GAPS: Confirmed quiz gaps or missing required qualifications
-  const interviewBlockers = useMemo(() => skillsList.filter((s) => {
-    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
-    if (isAssessed) {
-      return s.is_weakness || (s.level_gap !== null && s.level_gap > 0) || (s.total_score !== null && s.total_score < 0.50);
+  const handleCopyText = async (key, text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch (e) {
+      console.warn('Copy failed', e);
     }
-    // Missing from CV or marked as missing
-    return !s.matched || s.cv_match_status === 'Missing';
-  }), [skillsList]);
-
-  // 3. UNVERIFIED / SELF-REPORTED: Claimed in CV text but pending empirical test proof
-  const unverifiedClaims = useMemo(() => skillsList.filter((s) => {
-    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
-    if (isAssessed) return false;
-    return s.matched && s.cv_match_status !== 'Missing';
-  }), [skillsList]);
-
-  // Authoritative Verdict & Overall Status Resolution
-  const finalVerdict = analysisResult?.readiness_verdict || analysisResult?.final_verdict || aggregationData?.readiness_verdict || aggregationData?.final_verdict || 'Evaluation Complete';
-  const overallConfidenceDisplay = formatConfidence(aggregationData?.recommendation_confidence || analysisResult?.recommendation_confidence || 0.85);
-  const assessedSkills = useMemo(() => skillsList.filter((s) => s.assessed_level !== null && s.assessed_level !== undefined), [skillsList]);
-  const isPreliminary = Boolean(analysisResult?.is_preliminary ?? aggregationData?.is_preliminary ?? (assessedSkills.length === 0));
-
-  const overallMatchScore = analysisResult?.score_data?.score !== undefined 
-    ? `${Math.round(analysisResult.score_data.score)}%` 
-    : (aggregationData?.overall_score !== null && aggregationData?.overall_score !== undefined 
-        ? `${Math.round(aggregationData.overall_score * 100)}%` 
-        : '67%');
-
-  const totalSkillsCount = aggregationData?.total_skills || skillsList.length;
-
-  // Forecasted interview questions based on active JD & candidates gaps
-  const interviewQuestions = useMemo(() => {
-    return getInterviewQuestions(skillsList, interviewBlockers);
-  }, [skillsList, interviewBlockers]);
-
-  // Dynamic banner theme
-  const getBannerTheme = (v) => {
-    const s = String(v).toLowerCase();
-    if (s.includes('interview') || s.includes('ready')) {
-      return {
-        gradient: 'linear-gradient(135deg, #065f46 0%, #047857 100%)',
-        badgeBg: 'rgba(255, 255, 255, 0.2)',
-        icon: <CheckCircle2 size={24} style={{ color: '#a7f3d0' }} />
-      };
-    }
-    if (s.includes('major') || s.includes('upskill')) {
-      return {
-        gradient: 'linear-gradient(135deg, #881337 0%, #be123c 100%)',
-        badgeBg: 'rgba(255, 255, 255, 0.2)',
-        icon: <AlertTriangle size={24} style={{ color: '#fecaca' }} />
-      };
-    }
-    return {
-      gradient: 'linear-gradient(135deg, #3730a3 0%, #4f46e5 100%)',
-      badgeBg: 'rgba(255, 255, 255, 0.2)',
-      icon: <TrendingUp size={24} style={{ color: '#e0e7ff' }} />
-    };
   };
 
-  const bannerTheme = getBannerTheme(finalVerdict);
+  const toggleCvSuggest = (key) => {
+    setExpandedCvSuggest(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const isSkillAvailable = (skillName) => {
+    return isSupportedSkill(skillName, supportedSkillsList);
+  };
 
   const targetAssessmentPath = (skillName) => {
     const encoded = encodeURIComponent(skillName);
@@ -373,20 +212,175 @@ export default function FinalResultPage() {
       : `/assessment/${encoded}`;
   };
 
-  // Helper to extract study concepts
-  const getStudyConceptsForSkill = (skillName, requiredLevel) => {
-    const key = String(skillName || '').toLowerCase().trim();
-    const lvl = String(requiredLevel || 'intermediate').toLowerCase().trim();
-    if (TECHNICAL_STUDY_CONCEPTS[key]) {
-      return TECHNICAL_STUDY_CONCEPTS[key][lvl] || TECHNICAL_STUDY_CONCEPTS[key]['default'] || TECHNICAL_STUDY_CONCEPTS[key]['intermediate'];
+  // Model 1 Skill Evaluator classification helper
+  const getModel1Status = (s) => {
+    if (s.skill_recommendation) {
+      return {
+        label: s.skill_recommendation,
+        confidence: s.recommendation_confidence || 0.88,
+      };
     }
-    return [
-      `Core language syntax & standard library in ${skillName}`,
-      `Best practices, design patterns, & modular architecture`,
-      `Common performance bottlenecks & memory profiling`,
-      `Testing, edge-case coverage, & API integration`
-    ];
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    if (!isAssessed) {
+      return {
+        label: 'Pending Quiz',
+        confidence: null,
+      };
+    }
+    const score = s.total_score !== null && s.total_score !== undefined ? s.total_score : 0.5;
+    const normalizedScore = score > 1 ? score / 100 : score;
+    const gap = s.level_gap || 0;
+
+    if (normalizedScore < 0.40) {
+      return { label: 'Re-learn Basics', confidence: 0.90 };
+    } else if (gap > 0 || normalizedScore < 0.65) {
+      return { label: 'Upgrade Needed', confidence: 0.85 };
+    } else {
+      return { label: 'Mastered', confidence: 0.88 };
+    }
   };
+
+  // Categorize skills based on Model 1
+  const masteredSkills = useMemo(() => skillsList.filter(s => getModel1Status(s).label === 'Mastered'), [skillsList]);
+  const upgradeSkills = useMemo(() => skillsList.filter(s => getModel1Status(s).label === 'Upgrade Needed'), [skillsList]);
+  const speedSkills = useMemo(() => skillsList.filter(s => getModel1Status(s).label === 'Speed Practice'), [skillsList]);
+  const relearnSkills = useMemo(() => skillsList.filter(s => getModel1Status(s).label === 'Re-learn Basics'), [skillsList]);
+  const unassessedSkills = useMemo(() => skillsList.filter(s => s.assessed_level === null || s.assessed_level === undefined), [skillsList]);
+
+  // Verified Strengths vs Blockers for synthesis
+  const verifiedStrengths = useMemo(() => skillsList.filter((s) => {
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    if (!isAssessed) return false;
+    return !s.is_weakness && (s.level_gap === null || s.level_gap <= 0) && (s.total_score === null || s.total_score >= 0.50);
+  }), [skillsList]);
+
+  const interviewBlockers = useMemo(() => skillsList.filter((s) => {
+    const isAssessed = s.assessed_level !== null && s.assessed_level !== undefined;
+    if (isAssessed) {
+      return s.is_weakness || (s.level_gap !== null && s.level_gap > 0) || (s.total_score !== null && s.total_score < 0.50);
+    }
+    return !s.matched || s.cv_match_status === 'Missing';
+  }), [skillsList]);
+
+  const missingCvSkills = useMemo(() => skillsList.filter((s) => !s.matched || s.cv_match_status === 'Missing'), [skillsList]);
+  const skillsWithCvFeedback = useMemo(() => skillsList.filter((s) => s.actionable_feedback?.suggested_wording), [skillsList]);
+
+  // Filtered skills for Model 1 grid
+  const filteredModel1Skills = useMemo(() => {
+    if (model1Filter === 'All') return skillsList;
+    if (model1Filter === 'Mastered') return masteredSkills;
+    if (model1Filter === 'Upgrade') return upgradeSkills;
+    if (model1Filter === 'Speed') return speedSkills;
+    if (model1Filter === 'Relearn') return relearnSkills;
+    if (model1Filter === 'Unassessed') return unassessedSkills;
+    return skillsList;
+  }, [skillsList, model1Filter, masteredSkills, upgradeSkills, speedSkills, relearnSkills, unassessedSkills]);
+
+  // Model 2 Final Verdict & Reasons
+  const finalVerdict = analysisResult?.readiness_verdict || analysisResult?.final_verdict || aggregationData?.readiness_verdict || aggregationData?.final_verdict || 'Short-Term Prep';
+  const assessedSkillsCount = useMemo(() => skillsList.filter((s) => s.assessed_level !== null && s.assessed_level !== undefined).length, [skillsList]);
+  const isPreliminary = Boolean(analysisResult?.is_preliminary ?? aggregationData?.is_preliminary ?? (assessedSkillsCount === 0));
+
+  const model2ConfidenceDisplay = formatConfidence(aggregationData?.recommendation_confidence || analysisResult?.recommendation_confidence || 0.86);
+
+  const verificationStatusText = aggregationData?.verification_status || (isPreliminary
+    ? 'Unverified (Preliminary CV Evidence Only)'
+    : assessedSkillsCount < skillsList.length
+      ? `Partially Verified (${assessedSkillsCount}/${skillsList.length} Quizzes Completed)`
+      : 'Fully Assessment Verified');
+
+  // Model 2 Explainable Reasons
+  const readinessReasons = useMemo(() => {
+    if (aggregationData?.readiness_reasons && Array.isArray(aggregationData.readiness_reasons) && aggregationData.readiness_reasons.length > 0) {
+      return aggregationData.readiness_reasons;
+    }
+    if (analysisResult?.readiness_reasons && Array.isArray(analysisResult.readiness_reasons) && analysisResult.readiness_reasons.length > 0) {
+      return analysisResult.readiness_reasons;
+    }
+    // Dynamic synthesized fallback reasons
+    const totalReq = skillsList.filter(s => (s.importance || 'required').toLowerCase() !== 'preferred').length || skillsList.length;
+    const missingCount = interviewBlockers.length;
+    const foundCount = Math.max(0, totalReq - missingCount);
+    return [
+      `Found qualification evidence for ${foundCount} of ${totalReq} core requirements in your CV profile.`,
+      isPreliminary
+        ? 'Technical proficiency has not yet been verified via assessments (0 completed attempts).'
+        : `Identified ${missingCount} priority skill area${missingCount !== 1 ? 's' : ''} requiring practice before technical rounds.`,
+      isPreliminary
+        ? 'Complete recommended 5-minute technical quizzes below to transform keyword claims into verified strengths.'
+        : 'Targeted preparation on your identified question-level misconceptions will elevate readiness for technical interviews.',
+    ];
+  }, [aggregationData, analysisResult, skillsList, interviewBlockers, isPreliminary]);
+
+  const overallMatchScore = analysisResult?.score_data?.score !== undefined
+    ? `${Math.round(analysisResult.score_data.score)}%`
+    : (aggregationData?.overall_score !== null && aggregationData?.overall_score !== undefined
+      ? `${Math.round(aggregationData.overall_score * 100)}%`
+      : '60%');
+
+  // Filter weak topics matching this job's skills
+  const jobSkillNames = useMemo(() => new Set(skillsList.map(s => s.skill.toLowerCase().trim())), [skillsList]);
+  const jobRelevantWeakTopics = useMemo(() => {
+    if (!weaknessData?.weak_topics || !Array.isArray(weaknessData.weak_topics)) return [];
+    const directMatches = weaknessData.weak_topics.filter(wt => jobSkillNames.has((wt.skill || '').toLowerCase().trim()));
+    return directMatches.length > 0 ? directMatches : weaknessData.weak_topics;
+  }, [weaknessData, jobSkillNames]);
+
+  // Group weak topics by skill for clean, actionable display (simply state which skill & subtopics to learn)
+  const weakTopicsBySkill = useMemo(() => {
+    const map = new Map();
+    jobRelevantWeakTopics.forEach((item) => {
+      const skillName = item.skill || 'Other';
+      if (!map.has(skillName)) {
+        map.set(skillName, {
+          skill: skillName,
+          suggested_level: item.suggested_level,
+          subtopics: [],
+        });
+      }
+      const group = map.get(skillName);
+      const subtopic = (item.topic || 'General Concepts').trim();
+      if (!group.subtopics.includes(subtopic)) {
+        group.subtopics.push(subtopic);
+      }
+    });
+    return Array.from(map.values());
+  }, [jobRelevantWeakTopics]);
+
+  const displayJobTitle = analysisResult?.job_title || 'Your target job';
+  const effectiveCompany = analysisResult?.company || '';
+  const displayCompany = effectiveCompany ? ` at ${effectiveCompany}` : '';
+  const displayCvName = analysisResult?.cv_filename || analysisResult?.file_name || 'Uploaded Resume';
+
+  // Badge styling for Model 1 recommendations
+  const getModel1BadgeStyle = (recLabel) => {
+    switch (recLabel) {
+      case 'Mastered':
+        return { backgroundColor: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' };
+      case 'Upgrade Needed':
+        return { backgroundColor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' };
+      case 'Speed Practice':
+        return { backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' };
+      case 'Re-learn Basics':
+        return { backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' };
+      default:
+        return { backgroundColor: '#f8fafc', color: '#64748b', border: '1px solid #cbd5e1' };
+    }
+  };
+
+  // Verdict theme color
+  const getVerdictTheme = (v) => {
+    const clean = String(v || '').toLowerCase();
+    if (clean.includes('ready')) {
+      return { borderTop: '4px solid #16a34a', bg: '#f0fdf4', badgeBg: '#dcfce7', badgeColor: '#15803d', badgeBorder: '#bbf7d0' };
+    }
+    if (clean.includes('major')) {
+      return { borderTop: '4px solid #dc2626', bg: '#fef2f2', badgeBg: '#fee2e2', badgeColor: '#b91c1c', badgeBorder: '#fecaca' };
+    }
+    return { borderTop: '4px solid #ea580c', bg: '#fffbeb', badgeBg: '#fef3c7', badgeColor: '#92400e', badgeBorder: '#fde68a' };
+  };
+
+  const verdictTheme = getVerdictTheme(finalVerdict);
 
   // Loading Guard
   if (loadingAgg && !analysisResult) {
@@ -395,7 +389,7 @@ export default function FinalResultPage() {
         <div className="card" style={{ padding: '3.5rem 2rem' }}>
           <div className="spinner spinner-dark mb-4" style={{ width: 40, height: 40, borderWidth: 3, margin: '0 auto 1.5rem' }}></div>
           <h2 className="card-title text-xl mb-2">Synthesizing Candidate Evaluation</h2>
-          <p className="text-muted text-sm">Aggregating CV evidence, quiz scores, and Model 2 readiness recommendations...</p>
+          <p className="text-muted text-sm">Aggregating CV evidence, quiz answer telemetry, and ML readiness models...</p>
         </div>
       </div>
     );
@@ -409,7 +403,7 @@ export default function FinalResultPage() {
           <div className="badge badge-purple mb-3">Candidate Evaluation</div>
           <h2 className="card-title text-xl mb-2">No Active Job Analysis Found</h2>
           <p className="text-muted text-sm mb-6" style={{ lineHeight: 1.5 }}>
-            To generate a comprehensive candidate evaluation and Model 2 recommendation, upload your CV and a job description on the dashboard.
+            To generate a comprehensive candidate evaluation and ML model recommendations, upload your CV and a job description on the dashboard.
           </p>
           <div className="flex justify-center">
             <button onClick={() => navigate('/dashboard')} className="btn btn-primary">
@@ -426,56 +420,173 @@ export default function FinalResultPage() {
     <div
       className="fade-in"
       style={{
-        maxWidth: '1000px',
-        margin: '0 auto',
         paddingBottom: '3.5rem',
         width: '100%',
         boxSizing: 'border-box',
-        overflowX: 'hidden'
       }}
     >
-      {/* 1. PAGE HEADER & QUICK ACTIONS */}
-      <div className="flex justify-between items-center mb-5 flex-wrap gap-4 pb-3" style={{ borderBottom: '1px solid var(--border-color)' }}>
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="badge badge-purple" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Final Candidate Evaluation Dossier
-            </span>
-            {activeAnalysisId && (
-              <span className="text-xs text-muted">
-                Session #{activeAnalysisId}
-              </span>
-            )}
+      {/* =========================================================================
+          1. TOP HERO: Consistent with Dashboard & Interview Prep Hub
+         ========================================================================= */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: '1.5rem',
+          flexWrap: 'wrap',
+          marginBottom: '2rem',
+        }}
+      >
+        {/* Left Column: Icon + Badges + Title + Subtitle + Action Buttons */}
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flex: '1 1 360px', minWidth: '300px' }}>
+          <div className="prep-header-icon" style={{ marginTop: '0.2rem' }}>
+            <Sparkles size={28} />
           </div>
-          <h1 className="page-title text-2xl font-extrabold text-main" style={{ margin: 0 }}>
-            Interview Readiness & Career Audit
-          </h1>
-          <p className="text-xs text-muted mt-1">
-            Empirical synthesis of resume claims, real technical assessment performance, and hiring manager evaluation criteria.
-          </p>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+              <span className="badge badge-purple" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Full AI Report & Candidate Dossier
+              </span>
+              <span className="text-xs text-muted">
+                Session ID #{activeAnalysisId || 'Active'}
+              </span>
+            </div>
+            <h1 className="page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.35rem 0', color: 'var(--text-main)', lineHeight: 1.25 }}>
+              {displayJobTitle}{displayCompany}
+            </h1>
+            <p className="page-subtitle" style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+              Matched against: <strong style={{ color: 'var(--text-main)' }}>{displayCvName}</strong>
+            </p>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate(activeAnalysisId ? `/dashboard?analysis_id=${activeAnalysisId}` : '/dashboard')}
+                className="btn btn-outline flex items-center gap-1.5"
+                style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
+              >
+                <ArrowLeft size={14} />
+                <span>Back to Dashboard</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearAnalysis();
+                  navigate('/dashboard', { replace: true });
+                }}
+                className="btn btn-outline flex items-center gap-1.5"
+                id="btn-analyze-another"
+                style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
+              >
+                <RefreshCw size={14} />
+                <span>Analyze Another Job</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleManualRefresh}
+                disabled={loadingAgg || isRefreshing}
+                className="btn btn-primary flex items-center gap-1.5"
+                style={{ padding: '0.55rem 1.15rem', fontSize: '0.85rem', fontWeight: 600 }}
+                title="Recalculate AI evaluation dossier"
+              >
+                <Sparkles size={15} className={loadingAgg || isRefreshing ? 'animate-spin' : ''} />
+                <span>{loadingAgg || isRefreshing ? 'Recalculating...' : 'Refresh Report'}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={handleManualRefresh}
-            disabled={loadingAgg || isRefreshing}
-            className="btn btn-outline flex items-center gap-1.5 text-xs"
-            style={{ padding: '0.5rem 0.9rem' }}
-            title="Recalculate Model 2 synthesis"
+        {/* Right Column: Glance Card (Consistent with Interview Prep Hub & Dashboard) */}
+        <div
+          className="card"
+          style={{
+            padding: '1rem 1.5rem',
+            marginBottom: 0,
+            minWidth: '340px',
+            flex: '0 1 440px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span className="text-xs uppercase tracking-wider font-semibold text-muted">
+              Evaluation at a glance
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span
+                className="badge badge-purple"
+                style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.5rem' }}
+                title="Model 2 final readiness verdict"
+              >
+                {finalVerdict}
+              </span>
+              {isPreliminary && (
+                <span
+                  className="badge"
+                  style={{
+                    fontSize: '0.68rem',
+                    padding: '0.15rem 0.5rem',
+                    backgroundColor: '#fef3c7',
+                    color: '#92400e',
+                    border: '1px solid #fde68a',
+                    fontWeight: 700,
+                  }}
+                  title="Technical proficiency unverified"
+                >
+                  Preliminary
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 4 Stats Columns */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.01em' }}>
+                {overallMatchScore}
+              </div>
+              <div className="text-xs text-muted">Resume Match</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--success-color)' }}>
+                {verifiedStrengths.length}
+              </div>
+              <div className="text-xs text-muted">Verified Proof</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--warning-color)' }}>
+                {interviewBlockers.length}
+              </div>
+              <div className="text-xs text-muted">Blocker Gaps</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--primary-600)' }}>
+                {model2ConfidenceDisplay}
+              </div>
+              <div className="text-xs text-muted">Model 2 Conf.</div>
+            </div>
+          </div>
+
+          {/* Verification Status Footer */}
+          <div
+            style={{
+              marginTop: '0.75rem',
+              paddingTop: '0.5rem',
+              borderTop: '1px solid var(--border-color)',
+              fontSize: '0.72rem',
+              color: 'var(--text-muted)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '0.5rem',
+              flexWrap: 'wrap',
+            }}
           >
-            <RefreshCw size={13} className={loadingAgg || isRefreshing ? 'animate-spin' : ''} />
-            <span>{loadingAgg || isRefreshing ? 'Recalculating...' : 'Refresh'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(activeAnalysisId ? `/dashboard?analysis_id=${activeAnalysisId}` : '/dashboard')}
-            className="btn btn-outline flex items-center gap-1.5 text-xs"
-            style={{ padding: '0.5rem 0.9rem' }}
-          >
-            <ArrowLeft size={13} />
-            <span>Back to Dashboard</span>
-          </button>
+            <span>{verificationStatusText}</span>
+            <span>{skillsList.length} skills in profile</span>
+          </div>
         </div>
       </div>
 
@@ -486,585 +597,785 @@ export default function FinalResultPage() {
         </div>
       )}
 
-      {/* 2. PILLAR 1: THE REALITY CHECK (CV Claims vs Empirical Truth Hero Card) */}
+      {/* =========================================================================
+          2. ML MODEL 2: CANDIDATE READINESS SYNTHESIS & HIRING VERDICT
+         ========================================================================= */}
       <div
         className="card mb-6"
         style={{
-          background: bannerTheme.gradient,
-          borderRadius: 'var(--radius)',
-          padding: '2rem',
-          boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.14)',
-          border: 'none',
+          padding: '1.5rem 1.75rem',
+          backgroundColor: '#ffffff',
+          border: '1px solid var(--border-color)',
+          ...verdictTheme,
         }}
       >
-        <div className="flex justify-between items-start gap-4 flex-wrap mb-4">
-          <div style={{ flex: '1 1 340px' }}>
-            <div className="flex items-center gap-2 mb-2 flex-wrap" style={{ opacity: 0.95, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
-              <div className="flex items-center gap-1.5">
-                {bannerTheme.icon}
-                <span>Authoritative Readiness Verdict</span>
-              </div>
+        <div className="flex justify-between items-start gap-4 flex-wrap mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-xs uppercase tracking-wider font-bold text-muted flex items-center gap-1.5">
+                <Brain size={14} style={{ color: 'var(--primary-600)' }} />
+                <span>ML Model 2 • Authoritative Candidate Readiness Verdict</span>
+              </span>
+              <span
+                className="badge"
+                style={{
+                  backgroundColor: verdictTheme.badgeBg,
+                  color: verdictTheme.badgeColor,
+                  border: `1px solid ${verdictTheme.badgeBorder}`,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                }}
+              >
+                {finalVerdict}
+              </span>
               {isPreliminary && (
                 <span
+                  className="badge"
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-                    color: '#ffffff',
-                    padding: '0.15rem 0.55rem',
-                    borderRadius: '9999px',
-                    fontSize: '0.68rem',
+                    backgroundColor: '#fef3c7',
+                    color: '#92400e',
+                    border: '1px solid #fde68a',
                     fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    border: '1px solid rgba(255, 255, 255, 0.4)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
+                    fontSize: '0.7rem',
                   }}
                 >
-                  <HelpCircle size={11} />
-                  <span>Preliminary (0 Quizzes Completed)</span>
+                  Preliminary Evaluation (0 Quizzes Completed)
                 </span>
               )}
             </div>
 
-            <div className="font-extrabold text-2xl md:text-3xl" style={{ letterSpacing: '-0.02em', lineHeight: 1.2, color: '#ffffff' }}>
-              {finalVerdict}
-            </div>
-
-            {/* Hiring Manager Executive Synthesis */}
-            <p className="text-xs mt-2.5" style={{ opacity: 0.95, maxWidth: '640px', lineHeight: 1.6, color: 'rgba(255, 255, 255, 0.95)' }}>
-              {isPreliminary
-                ? 'Your resume presents a viable keyword match, but technical capability is completely unverified. Complete the priority assessments below to convert resume claims into verified strengths.'
-                : interviewBlockers.length > 0
-                ? `Initial screening confirms your profile aligns with ${overallMatchScore} of core requirements. However, technical testing revealed ${interviewBlockers.length} critical gap${interviewBlockers.length > 1 ? 's' : ''} that will raise red flags in technical interview rounds. Focused review on identified blocker topics is recommended prior to technical interviews.`
-                : 'Candidate demonstrated verified proficiency across all tested job requirements. Technical assessment scores strongly confirm CV claims. Recommended to proceed to technical interview rounds with confidence.'}
-            </p>
-          </div>
-
-          {/* Side-by-Side Reality Metrics */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="match-stat-item" style={{ backgroundColor: bannerTheme.badgeBg }}>
-              <div className="text-xs" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 600 }}>
-                Resume Claims
-              </div>
-              <div className="font-extrabold text-xl mt-0.5">{overallMatchScore} Match</div>
-            </div>
-
-            <div className="match-stat-item" style={{ backgroundColor: bannerTheme.badgeBg }}>
-              <div className="text-xs" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 600 }}>
-                Empirically Verified
-              </div>
-              <div className="font-extrabold text-xl mt-0.5">
-                {verifiedStrengths.length} / {totalSkillsCount} Skills
-              </div>
-            </div>
-
-            {overallConfidenceDisplay && (
-              <div className="match-stat-item" style={{ backgroundColor: bannerTheme.badgeBg }}>
-                <div className="text-xs" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 600 }}>
-                  Model Confidence
-                </div>
-                <div className="font-extrabold text-xl mt-0.5">{overallConfidenceDisplay}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. PILLAR 2: 3-BUCKET CANDIDATE COMPETENCY PROFILE (High Signal, No Duplicate Grid!) */}
-      <div className="mb-6">
-        <div className="mb-3">
-          <h2 className="card-title text-lg font-bold flex items-center gap-2 mb-0.5" style={{ margin: 0 }}>
-            <Layers size={18} style={{ color: 'var(--primary-700)' }} />
-            <span>Candidate Competency Profile: Reality vs. Claims</span>
-          </h2>
-          <p className="text-xs text-muted" style={{ margin: 0 }}>
-            Evaluated by combining your direct assessment quiz scores with verified resume evidence.
-          </p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1rem', width: '100%' }}>
-          
-          {/* BUCKET 1: VERIFIED STRENGTHS */}
-          <div
-            className="card"
-            style={{
-              padding: '1.25rem',
-              margin: 0,
-              backgroundColor: '#ffffff',
-              border: '1px solid #bbf7d0',
-              borderTop: '4px solid #10b981',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-sm text-emerald-900 flex items-center gap-1.5">
-                  <CheckCircle2 size={16} className="text-emerald-600" />
-                  <span>Verified Strengths</span>
-                </span>
-                <span className="badge" style={{ backgroundColor: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: '0.68rem', fontWeight: 700 }}>
-                  {verifiedStrengths.length} Confirmed
-                </span>
-              </div>
-              <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.4 }}>
-                Skills where technical assessment scores empirically confirmed your proficiency at or above the job standard.
-              </p>
-
-              {verifiedStrengths.length === 0 ? (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded text-xs text-muted italic text-center my-2">
-                  No skills empirically confirmed yet. Take technical quizzes to build verified proof.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {verifiedStrengths.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: '0.6rem 0.75rem',
-                        backgroundColor: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
-                        borderRadius: 'var(--radius-sm)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div className="font-bold text-xs text-emerald-950">{item.skill}</div>
-                        <div className="text-xs text-emerald-700" style={{ fontSize: '0.7rem' }}>
-                          Standard: {formatLevel(item.required_level || item.level)}
-                        </div>
-                      </div>
-                      <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#15803d', fontSize: '0.7rem', fontWeight: 700 }}>
-                        Score: {formatScore(item.total_score) || 'Passed'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-3 pt-2 text-xs text-emerald-800" style={{ borderTop: '1px dashed #bbf7d0', fontSize: '0.72rem' }}>
-              ✓ Safe to anchor on as core technical talking points in interviews.
-            </div>
-          </div>
-
-          {/* BUCKET 2: INTERVIEW BLOCKERS & CRITICAL GAPS */}
-          <div
-            className="card"
-            style={{
-              padding: '1.25rem',
-              margin: 0,
-              backgroundColor: '#ffffff',
-              border: '1px solid #fecaca',
-              borderTop: '4px solid #ef4444',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-sm text-rose-950 flex items-center gap-1.5">
-                  <AlertTriangle size={16} className="text-rose-600" />
-                  <span>Interview Blockers</span>
-                </span>
-                <span className="badge" style={{ backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: '0.68rem', fontWeight: 700 }}>
-                  {interviewBlockers.length} Red Flags
-                </span>
-              </div>
-              <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.4 }}>
-                Failed assessments, low quiz scores, or critical required skills missing from your CV. These will disqualify you in technical rounds.
-              </p>
-
-              {interviewBlockers.length === 0 ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 font-medium text-center my-2">
-                  ✓ Zero critical interview blockers identified!
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {interviewBlockers.map((item, idx) => {
-                    const supported = isSupportedSkill(item.skill);
-                    const isAssessed = item.assessed_level !== null && item.assessed_level !== undefined;
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          padding: '0.6rem 0.75rem',
-                          backgroundColor: '#fef2f2',
-                          border: '1px solid #fecaca',
-                          borderRadius: 'var(--radius-sm)',
-                        }}
-                      >
-                        <div className="flex justify-between items-start gap-2 mb-1">
-                          <span className="font-bold text-xs text-rose-950">{item.skill}</span>
-                          <span className="badge" style={{ backgroundColor: '#fee2e2', color: '#b91c1c', fontSize: '0.65rem', fontWeight: 700 }}>
-                            {isAssessed ? `Score: ${formatScore(item.total_score)}` : 'Missing in CV'}
-                          </span>
-                        </div>
-                        <div className="text-xs text-rose-800" style={{ fontSize: '0.7rem', lineHeight: 1.3 }}>
-                          {isAssessed
-                            ? `Demonstrated ${formatLevel(item.assessed_level)} vs Required ${formatLevel(item.required_level || item.level)}`
-                            : 'Required qualification not evidenced in your resume text'}
-                        </div>
-                        {supported && (
-                          <div className="mt-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() => navigate(targetAssessmentPath(item.skill))}
-                              className="btn btn-primary text-xs"
-                              style={{ padding: '0.2rem 0.6rem', fontSize: '0.68rem', backgroundColor: '#dc2626', borderColor: '#b91c1c' }}
-                            >
-                              <span>{isAssessed ? 'Retake Quiz' : 'Take 5-Min Quiz'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-3 pt-2 text-xs text-rose-800" style={{ borderTop: '1px dashed #fecaca', fontSize: '0.72rem' }}>
-              ⚠ Prioritize fixing these before submitting job applications.
-            </div>
-          </div>
-
-          {/* BUCKET 3: SELF-REPORTED (AWAITING PROOF) */}
-          <div
-            className="card"
-            style={{
-              padding: '1.25rem',
-              margin: 0,
-              backgroundColor: '#ffffff',
-              border: '1px solid #bae6fd',
-              borderTop: '4px solid #0284c7',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-sm text-sky-950 flex items-center gap-1.5">
-                  <FileText size={16} className="text-sky-600" />
-                  <span>Claimed in CV</span>
-                </span>
-                <span className="badge" style={{ backgroundColor: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', fontSize: '0.68rem', fontWeight: 700 }}>
-                  {unverifiedClaims.length} Unassessed
-                </span>
-              </div>
-              <p className="text-xs text-muted mb-3" style={{ lineHeight: 1.4 }}>
-                Skills detected in your CV text that have not yet been empirically tested. Employers treat these as unverified claims.
-              </p>
-
-              {unverifiedClaims.length === 0 ? (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded text-xs text-muted italic text-center my-2">
-                  All CV skills have been evaluated.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '230px', overflowY: 'auto' }}>
-                  {unverifiedClaims.map((item, idx) => {
-                    const supported = isSupportedSkill(item.skill);
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          padding: '0.5rem 0.75rem',
-                          backgroundColor: '#f0f9ff',
-                          border: '1px solid #e0f2fe',
-                          borderRadius: 'var(--radius-sm)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div>
-                          <div className="font-semibold text-xs text-sky-950">{item.skill}</div>
-                          <div className="text-xs text-sky-700" style={{ fontSize: '0.68rem' }}>
-                            CV Level: {formatLevel(item.cv_level)}
-                          </div>
-                        </div>
-                        {supported ? (
-                          <button
-                            type="button"
-                            onClick={() => navigate(targetAssessmentPath(item.skill))}
-                            className="btn btn-outline text-xs"
-                            style={{ padding: '0.2rem 0.55rem', fontSize: '0.68rem', borderColor: '#bae6fd', color: '#0369a1' }}
-                          >
-                            Verify
-                          </button>
-                        ) : (
-                          <span className="text-muted" style={{ fontSize: '0.65rem', fontStyle: 'italic' }}>
-                            CV Evidence Only
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-3 pt-2 text-xs text-sky-800" style={{ borderTop: '1px dashed #bae6fd', fontSize: '0.72rem' }}>
-              ℹ An interviewer will test whether your real depth matches your CV text.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. PILLAR 3: TARGETED STUDY ROADMAP & CONCEPT PINPOINTING (Based on Quiz Mistakes) */}
-      {interviewBlockers.length > 0 && (
-        <div className="card mb-6" style={{ padding: '1.5rem', backgroundColor: '#ffffff', border: '1px solid var(--border-color)' }}>
-          <div className="mb-4">
-            <h2 className="card-title text-lg font-bold flex items-center gap-2 mb-0.5" style={{ margin: 0 }}>
-              <BookOpen size={18} style={{ color: 'var(--primary-700)' }} />
-              <span>Targeted Technical Study Roadmap</span>
-            </h2>
-            <p className="text-xs text-muted" style={{ margin: 0 }}>
-              Specific core concepts identified by your test evaluation that you must master to satisfy the job requirements.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-            {interviewBlockers.slice(0, 3).map((item, idx) => {
-              const concepts = getStudyConceptsForSkill(item.skill, item.required_level || item.level);
-              const supported = isSupportedSkill(item.skill);
-
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    backgroundColor: '#fafafa',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '1.25rem',
-                  }}
-                >
-                  <div className="flex justify-between items-start gap-3 flex-wrap mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="font-bold text-main text-base">{item.skill}</span>
-                        <span className="badge" style={{ fontSize: '0.68rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
-                          Target Standard: {formatLevel(item.required_level || item.level)}
-                        </span>
-                        <span className="badge" style={{ fontSize: '0.68rem', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
-                          Estimated Prep: 3–5 Days
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted">
-                        Focus your study on these specific high-weight interview topics:
-                      </div>
-                    </div>
-
-                    {supported && (
-                      <button
-                        type="button"
-                        onClick={() => navigate(targetAssessmentPath(item.skill))}
-                        className="btn btn-outline text-xs flex items-center gap-1.5"
-                        style={{ padding: '0.35rem 0.8rem' }}
-                      >
-                        <RotateCcw size={13} />
-                        <span>Retake Skill Quiz</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Bulleted High-Impact Concepts */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.5rem', marginTop: '0.75rem' }}>
-                    {concepts.map((concept, cIdx) => (
-                      <div
-                        key={cIdx}
-                        style={{
-                          padding: '0.5rem 0.75rem',
-                          backgroundColor: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '4px',
-                          fontSize: '0.78rem',
-                          color: '#334155',
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '0.5rem',
-                        }}
-                      >
-                        <span style={{ color: 'var(--primary-600)', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1 }}>•</span>
-                        <span>{concept}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 5. PILLAR 4: TECHNICAL INTERVIEW QUESTION FORECAST */}
-      <div className="card mb-6" style={{ padding: '1.5rem', backgroundColor: '#ffffff', border: '1px solid var(--border-color)' }}>
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-0.5">
-            <MessageSquare size={18} style={{ color: 'var(--primary-700)' }} />
-            <h2 className="card-title text-lg font-bold" style={{ margin: 0 }}>
-              Technical Interview Question Forecast
+            <h2 className="card-title text-lg font-bold text-main mb-1" style={{ margin: 0, letterSpacing: '-0.01em' }}>
+              {finalVerdict === 'Interview Ready'
+                ? 'High Competency Match: Ready for Technical Screening'
+                : finalVerdict === 'Short-Term Prep'
+                  ? 'Viable Candidate Alignment: Targeted Review Recommended'
+                  : 'Foundational Skill Gap: Structured Upskilling Required'}
             </h2>
           </div>
-          <p className="text-xs text-muted" style={{ margin: 0 }}>
-            High-probability questions hiring teams will ask based on this job description and your identified skill profile.
-          </p>
+
+          <div className="text-right">
+            <div className="text-xs text-muted">Model 2 Decision Confidence</div>
+            <div className="font-bold text-lg" style={{ color: 'var(--primary-700)' }}>
+              {model2ConfidenceDisplay}
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', width: '100%' }}>
-          {interviewQuestions.map((q, idx) => (
-            <div
-              key={idx}
-              style={{
-                backgroundColor: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 'var(--radius-sm)',
-                padding: '1rem 1.25rem',
-              }}
-            >
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className="badge" style={{ backgroundColor: '#e0e7ff', color: '#4338ca', border: '1px solid #c7d2fe', fontSize: '0.68rem', fontWeight: 700 }}>
-                  Question {idx + 1}
-                </span>
-                <span className="text-xs font-bold text-slate-700">{q.topic}</span>
-              </div>
+        {/* Model 2 Explainable Rationale */}
+        <div
+          style={{
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 'var(--radius-sm)',
+            padding: '1rem 1.25rem',
+            marginTop: '0.75rem',
+          }}
+        >
+          <div className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Flame size={14} style={{ color: '#ea580c' }} />
+            <span>Model 2 Decision Drivers & Assessment Signals:</span>
+          </div>
 
-              <div className="font-semibold text-main text-sm mb-2" style={{ lineHeight: 1.4 }}>
-                "{q.question}"
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+            {readinessReasons.map((reason, idx) => (
+              <div key={idx} className="flex items-start gap-2 text-xs text-slate-700" style={{ lineHeight: 1.5 }}>
+                <span style={{ color: 'var(--primary-600)', fontWeight: 800, marginTop: '-1px' }}>•</span>
+                <span>{reason}</span>
               </div>
-
-              <div className="text-xs text-muted p-2 rounded bg-white border border-slate-200" style={{ fontStyle: 'italic', lineHeight: 1.4 }}>
-                <span className="font-semibold text-slate-600 not-italic">Interviewer Expectation: </span>
-                {q.hint}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 6. PILLAR 5: RESUME OPTIMIZATION & COPYABLE BULLET POINTS */}
-      {skillsList.some(s => s.actionable_feedback) && (
-        <div className="card mb-6" style={{ padding: '1.5rem', backgroundColor: '#ffffff', border: '1px solid var(--border-color)' }}>
-          <div className="mb-4">
+      {/* =========================================================================
+          3. SECTION 1: SPECIFIC AREAS TO IMPROVE BY SKILL
+             (Identified from user's technical assessment answers)
+         ========================================================================= */}
+      <div className="card mb-6" style={{ padding: '1.5rem 1.75rem', backgroundColor: '#ffffff', border: '1px solid var(--border-color)' }}>
+        <div className="flex justify-between items-start gap-3 flex-wrap mb-4">
+          <div>
             <div className="flex items-center gap-2 mb-0.5">
-              <Sparkles size={18} style={{ color: 'var(--primary-700)' }} />
+              <Target size={18} style={{ color: 'var(--primary-700)' }} />
               <h2 className="card-title text-lg font-bold" style={{ margin: 0 }}>
-                Resume Optimization: Ready-to-Copy Bullets
+                Specific Areas to Improve
               </h2>
             </div>
             <p className="text-xs text-muted" style={{ margin: 0 }}>
-              Enhance how your skills are presented on your resume before submitting to this hiring manager.
+              Specific subtopics identified from your assessments that need focused learning and practice.
             </p>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-            {skillsList.filter(s => s.actionable_feedback).map((item, idx) => {
-              const fb = item.actionable_feedback;
-              const isCopied = copiedKey === item.skill;
-              const isExpanded = Boolean(expandedCvSuggest[item.skill]);
+          {weaknessData?.total_assessments_completed > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', fontSize: '0.72rem' }}>
+                {weaknessData.total_questions_analyzed} Questions Evaluated
+              </span>
+              <span className="badge" style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontSize: '0.72rem', fontWeight: 700 }}>
+                {Math.round((weaknessData.overall_accuracy || 0) * 100)}% Quiz Accuracy
+              </span>
+            </div>
+          )}
+        </div>
 
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    backgroundColor: '#fafafa',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '1.15rem 1.25rem',
-                  }}
-                >
-                  <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-main text-sm">{item.skill}</span>
-                      <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.68rem', border: '1px solid #cbd5e1' }}>
-                        Section: {fb.section || 'Experience'}
-                      </span>
+        {/* State A: User has real question-level weaknesses from completed assessments */}
+        {weakTopicsBySkill.length > 0 ? (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+              {weakTopicsBySkill.map((group, idx) => {
+                const supported = isSkillAvailable(group.skill);
+                const skillMeta = skillsList.find((s) => s.skill.toLowerCase() === group.skill.toLowerCase());
+                const targetLevel = skillMeta?.required_level || skillMeta?.level || group.suggested_level;
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '1.25rem 1.35rem',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                    }}
+                  >
+                    <div>
+                      {/* Skill Name & Subtopic Count */}
+                      <div className="flex justify-between items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#0f172a' }}>
+                            {group.skill}
+                          </span>
+                          {targetLevel && (
+                            <span className="text-xs text-muted">
+                              Target: {formatLevel(targetLevel)}
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor: '#fff7ed',
+                            color: '#c2410c',
+                            border: '1px solid #ffedd5',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            padding: '0.2rem 0.55rem',
+                          }}
+                        >
+                          {group.subtopics.length} {group.subtopics.length === 1 ? 'subtopic to learn' : 'subtopics to learn'}
+                        </span>
+                      </div>
+
+                      {/* Subtopics List */}
+                      <div className="mb-2">
+                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748b', display: 'block', marginBottom: '0.45rem' }}>
+                          Subtopics to learn:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {group.subtopics.map((subtopic, sIdx) => (
+                            <span
+                              key={sIdx}
+                              className="badge"
+                              style={{
+                                backgroundColor: '#f8fafc',
+                                border: '1px solid #cbd5e1',
+                                color: '#1e293b',
+                                fontSize: '0.78rem',
+                                padding: '0.35rem 0.65rem',
+                                fontWeight: 500,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.4rem',
+                                borderRadius: '6px',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: '50%',
+                                  backgroundColor: '#ea580c',
+                                  display: 'inline-block',
+                                }}
+                              />
+                              {subtopic}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
-                    {fb.suggested_wording && (
+                    {/* Actions */}
+                    <div
+                      className="mt-4 pt-3 flex items-center justify-between gap-2"
+                      style={{ borderTop: '1px solid #f1f5f9' }}
+                    >
+                      <div>
+                        {skillMeta?.attempt_id && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/assessment/review/${skillMeta.attempt_id}`)}
+                            className="btn btn-outline text-xs flex items-center gap-1"
+                            style={{ padding: '0.25rem 0.65rem', borderColor: '#cbd5e1', color: '#475569' }}
+                          >
+                            <FileText size={12} />
+                            <span>Review Answers</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {supported && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(targetAssessmentPath(group.skill))}
+                          className="btn btn-outline text-xs flex items-center gap-1"
+                          style={{ padding: '0.25rem 0.65rem', borderColor: '#cbd5e1', color: '#1e293b', fontWeight: 600 }}
+                        >
+                          <RotateCcw size={12} />
+                          <span>Retake {group.skill} Quiz</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Confirmed Strong Topics Pill Strip */}
+            {weaknessData?.strong_topics && weaknessData.strong_topics.length > 0 && (
+              <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap text-xs text-muted" style={{ borderTop: '1px solid var(--border-color)' }}>
+                <span className="font-bold text-slate-700 flex items-center gap-1">
+                  <CheckCircle size={14} className="text-emerald-600" />
+                  <span>Strong Topics Confirmed:</span>
+                </span>
+                {weaknessData.strong_topics.slice(0, 6).map((st, sIdx) => (
+                  <span
+                    key={sIdx}
+                    className="badge"
+                    style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '0.72rem', padding: '0.2rem 0.55rem' }}
+                  >
+                    ✓ {st.skill}: {st.topic}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : weaknessData?.total_assessments_completed > 0 ? (
+          /* State B: User has completed assessments with NO weak topics identified */
+          <div
+            style={{
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1.25rem 1.5rem',
+            }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 size={18} className="text-emerald-600" />
+              <span className="font-bold text-sm text-emerald-900">
+                No Critical Knowledge Gaps Identified
+              </span>
+            </div>
+            <p className="text-xs text-emerald-800" style={{ margin: 0 }}>
+              Great job! You achieved solid accuracy across all tested subtopics in your completed technical assessments.
+            </p>
+            {weaknessData?.strong_topics && weaknessData.strong_topics.length > 0 && (
+              <div className="mt-3 flex items-center gap-2 flex-wrap text-xs">
+                <span className="font-bold text-emerald-900">Demonstrated Strengths:</span>
+                {weaknessData.strong_topics.map((st, sIdx) => (
+                  <span
+                    key={sIdx}
+                    className="badge"
+                    style={{ backgroundColor: '#ffffff', color: '#047857', border: '1px solid #a7f3d0', fontSize: '0.72rem' }}
+                  >
+                    ✓ {st.skill}: {st.topic}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* State B: User has 0 completed assessments (Preliminary state) */
+          <div
+            style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1.5rem',
+            }}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: '8px',
+                  backgroundColor: '#eff6ff',
+                  color: 'var(--primary-600)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <HelpCircle size={22} />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 mb-0.5">
+                  Technical Proficiency Unverified (0 Quizzes Completed)
+                </h3>
+                <p className="text-xs text-muted" style={{ margin: 0, lineHeight: 1.5 }}>
+                  You have not completed technical assessment quizzes for this job's competencies yet. Without direct quiz answers, Model 1 and error telemetry cannot pinpoint question-level misconceptions. Take the priority quizzes below to unlock empirical error diagnosis.
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Priority Skills to Verify for this Job:
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem' }}>
+              {skillsList.slice(0, 4).map((item, idx) => {
+                const supported = isSkillAvailable(item.skill);
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '0.85rem 1rem',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">{item.skill}</div>
+                      <div className="text-xs text-muted" style={{ fontSize: '0.7rem' }}>
+                        Job Standard: {formatLevel(item.required_level || item.level)}
+                      </div>
+                    </div>
+
+                    {supported ? (
                       <button
                         type="button"
-                        onClick={() => handleCopyText(item.skill, fb.suggested_wording)}
-                        className="btn btn-outline text-xs flex items-center gap-1.5"
-                        style={{ padding: '0.25rem 0.65rem', color: '#059669', borderColor: '#a7f3d0', backgroundColor: '#ffffff' }}
+                        onClick={() => navigate(targetAssessmentPath(item.skill))}
+                        className="btn btn-primary text-xs flex items-center gap-1"
+                        style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 600 }}
                       >
-                        {isCopied ? <Check size={12} /> : <Copy size={12} />}
-                        <span>{isCopied ? 'Copied to Clipboard!' : 'Copy Text'}</span>
+                        <span>Take 5-Min Quiz</span>
+                        <ArrowRight size={12} />
                       </button>
+                    ) : (
+                      <span className="text-xs text-muted italic" style={{ fontSize: '0.7rem' }}>
+                        CV Evidenced Only
+                      </span>
                     )}
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
-                  <div className="text-xs text-muted mb-2">
-                    {fb.explanation}
-                  </div>
+      {/* =========================================================================
+          4. SECTION 2: SKILL MATCH TABLE
+             (Same consistent table component used across Dashboard and Analysis)
+         ========================================================================= */}
+      <SkillMatchTable
+        skills={skillsList}
+        supportedSkills={supportedSkillsList}
+        analysisId={activeAnalysisId}
+        title="Skill Match Analysis"
+        subtitle="Detailed alignment of your verified proof and quiz results against job requirements."
+        icon={<Layers size={18} style={{ color: 'var(--primary-700)' }} />}
+        className="mb-6"
+      />
 
-                  {fb.suggested_wording ? (
-                    <blockquote
+      {/* =========================================================================
+          5. SECTION 3: STRATEGIC ACTION PLAN
+         ========================================================================= */}
+      <div className="card mb-6" style={{ padding: '1.5rem 1.75rem', backgroundColor: '#ffffff', border: '1px solid var(--border-color)' }}>
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-0.5">
+            <Lightbulb size={18} style={{ color: 'var(--primary-700)' }} />
+            <h2 className="card-title text-lg font-bold" style={{ margin: 0 }}>
+              Strategic Action Plan
+            </h2>
+          </div>
+          <p className="text-xs text-muted" style={{ margin: 0 }}>
+            Key priorities for technical practice, resume refinement, and interview prep.
+          </p>
+        </div>
+
+        {/* Vertical Stack of Action Boxes */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Box 1: Technical Practice */}
+          <div
+            style={{
+              padding: '1.25rem 1.4rem',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-sm)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            }}
+          >
+            <div className="flex justify-between items-center gap-2 mb-3">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="badge badge-purple"
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '6px',
+                  }}
+                >
+                  1. Technical Practice
+                </span>
+                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>Skills to Focus on First</span>
+              </div>
+              {interviewBlockers.length > 0 && (
+                <span
+                  className="badge"
+                  style={{
+                    backgroundColor: '#fff7ed',
+                    color: '#c2410c',
+                    border: '1px solid #ffedd5',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    padding: '0.2rem 0.55rem',
+                  }}
+                >
+                  {interviewBlockers.length} {interviewBlockers.length === 1 ? 'Skill to Prioritize' : 'Skills to Prioritize'}
+                </span>
+              )}
+            </div>
+
+            {interviewBlockers.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.75rem' }}>
+                {interviewBlockers.slice(0, 3).map((item, idx) => {
+                  const supported = isSkillAvailable(item.skill);
+                  const hasAttempt = Boolean(item.attempt_id);
+                  return (
+                    <div
+                      key={idx}
                       style={{
-                        margin: '0.5rem 0 0 0',
-                        padding: '0.65rem 0.85rem',
-                        backgroundColor: '#f0fdf4',
-                        borderLeft: '3px solid #10b981',
-                        fontSize: '0.825rem',
-                        color: '#1e293b',
-                        lineHeight: 1.5,
-                        borderRadius: '0 4px 4px 0',
+                        padding: '0.85rem 1.15rem',
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.75rem',
                       }}
                     >
-                      "{fb.suggested_wording}"
-                    </blockquote>
-                  ) : null}
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.92rem', color: '#0f172a', marginBottom: '2px' }}>
+                          {item.skill}
+                        </div>
+                        <div className="text-xs text-muted">
+                          Target: <span style={{ fontWeight: 600, color: '#334155' }}>{formatLevel(item.required_level || item.level)}</span>
+                        </div>
+                      </div>
 
-                  {fb.original_text && (
-                    <div className="mt-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => toggleCvSuggest(item.skill)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', color: 'var(--primary-600)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
-                      >
-                        <span>{isExpanded ? 'Hide original wording' : 'View original wording'}</span>
-                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                      </button>
+                      {supported ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(targetAssessmentPath(item.skill))}
+                          className="btn btn-outline text-xs flex items-center gap-1.5"
+                          style={{
+                            padding: '0.35rem 0.75rem',
+                            backgroundColor: '#ffffff',
+                            borderColor: '#cbd5e1',
+                            fontWeight: 600,
+                            height: 32,
+                            borderRadius: '6px',
+                          }}
+                        >
+                          <RotateCcw size={12} />
+                          <span>{hasAttempt ? 'Retake Quiz' : 'Take Quiz'}</span>
+                        </button>
+                      ) : (
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor: '#ffffff',
+                            color: '#64748b',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.72rem',
+                            padding: '0.35rem 0.75rem',
+                            height: 32,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            borderRadius: '6px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          Self-study
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: '0.85rem 1.15rem',
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.82rem',
+                  color: '#166534',
+                }}
+              >
+                <CheckCircle2 size={16} className="text-emerald-600" />
+                <span className="font-semibold">
+                  All required technical skills meet or exceed the target level for this role.
+                </span>
+              </div>
+            )}
+          </div>
 
-                      {isExpanded && (
-                        <div className="text-left text-xs text-muted mt-1 p-2 bg-white rounded border border-slate-200 italic">
-                          Current text: "{fb.original_text}"
+          {/* Box 2: Resume Optimization */}
+          <div
+            style={{
+              padding: '1.25rem 1.4rem',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-sm)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            }}
+          >
+            <div className="flex justify-between items-center gap-2 mb-3">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="badge"
+                  style={{
+                    backgroundColor: '#ecfdf5',
+                    color: '#047857',
+                    border: '1px solid #a7f3d0',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '6px',
+                  }}
+                >
+                  2. Resume Refinement
+                </span>
+                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>CV Improvement Suggestions</span>
+              </div>
+            </div>
+
+            {skillsWithCvFeedback.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {skillsWithCvFeedback.slice(0, 2).map((item, idx) => {
+                  const fb = item.actionable_feedback;
+                  const isCopied = copiedKey === item.skill;
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: '0.85rem 1.15rem',
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a' }}>
+                          {item.skill} — Suggested CV Bullet:
+                        </span>
+                        {fb.suggested_wording && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(item.skill, fb.suggested_wording)}
+                            className="btn btn-outline text-xs flex items-center gap-1"
+                            style={{
+                              padding: '0.2rem 0.55rem',
+                              fontSize: '0.68rem',
+                              backgroundColor: '#ffffff',
+                              borderColor: '#cbd5e1',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            {isCopied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                            <span>{isCopied ? 'Copied!' : 'Copy Bullet'}</span>
+                          </button>
+                        )}
+                      </div>
+                      {fb.suggested_wording && (
+                        <div
+                          style={{
+                            padding: '0.6rem 0.85rem',
+                            backgroundColor: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            color: '#334155',
+                            fontStyle: 'italic',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          "{fb.suggested_wording}"
                         </div>
                       )}
                     </div>
-                  )}
+                  );
+                })}
+              </div>
+            ) : missingCvSkills.length > 0 ? (
+              <div
+                style={{
+                  padding: '0.85rem 1.15rem',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem',
+                  color: '#334155',
+                  lineHeight: 1.6,
+                }}
+              >
+                Your resume does not explicitly highlight:{' '}
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                  {missingCvSkills.slice(0, 4).map((s) => s.skill).join(', ')}
+                </span>.
+                {' '}Consider adding project details or practical exposure for these skills to improve keyword matching.
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: '0.85rem 1.15rem',
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.82rem',
+                  color: '#166534',
+                }}
+              >
+                <CheckCircle2 size={16} className="text-emerald-600" />
+                <span className="font-semibold">
+                  Your resume covers all required competencies highlighted in this job description.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Box 3: Interview Positioning */}
+          <div
+            style={{
+              padding: '1.25rem 1.4rem',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 'var(--radius-sm)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            }}
+          >
+            <div className="flex justify-between items-center gap-2 mb-3">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="badge"
+                  style={{
+                    backgroundColor: '#eff6ff',
+                    color: '#1d4ed8',
+                    border: '1px solid #bfdbfe',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '6px',
+                  }}
+                >
+                  3. Interview Positioning
+                </span>
+                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>Talking Points for Live Rounds</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem' }}>
+              <div
+                style={{
+                  padding: '0.85rem 1.15rem',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a', marginBottom: '0.35rem' }}>
+                  Anchor on Verified Strengths
                 </div>
-              );
-            })}
+                <div style={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.55 }}>
+                  {verifiedStrengths.length > 0
+                    ? `Lead technical discussions with concrete examples demonstrating your verified proficiency in ${verifiedStrengths.map((s) => s.skill).slice(0, 3).join(', ')}.`
+                    : 'Anchor technical conversations on your strongest relevant engineering projects and system architecture.'}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '0.85rem 1.15rem',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a', marginBottom: '0.35rem' }}>
+                  Addressing Growth Areas
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.55 }}>
+                  {interviewBlockers.length > 0
+                    ? `For ${interviewBlockers.slice(0, 2).map((s) => s.skill).join(' and ')}, acknowledge your current depth transparently and emphasize your hands-on practice and fast ramp-up ability.`
+                    : 'Speak with confidence on your core competencies and emphasize team collaboration, scalability, and impact.'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* 7. FOOTER NAVIGATION */}
+      {/* =========================================================================
+          6. FOOTER NAVIGATION
+         ========================================================================= */}
       <div className="flex justify-between items-center flex-wrap gap-4 pt-3" style={{ borderTop: '1px solid var(--border-color)' }}>
         <button
           onClick={() => navigate(activeAnalysisId ? `/dashboard?analysis_id=${activeAnalysisId}` : '/dashboard')}
           className="btn btn-outline flex items-center gap-2"
         >
           <ArrowLeft size={16} />
-          <span>Back to Skill Matrix</span>
+          <span>Back to Dashboard</span>
         </button>
 
-        <button
-          onClick={() => {
-            clearAnalysis();
-            navigate('/dashboard');
-          }}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <RefreshCw size={16} />
-          <span>Analyze Another Job</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => navigate('/results')}
+            className="btn btn-outline flex items-center gap-2"
+          >
+            <BookOpen size={16} />
+            <span>Open Interview Prep Hub</span>
+          </button>
+
+          <button
+            onClick={() => {
+              clearAnalysis();
+              navigate('/dashboard', { replace: true });
+            }}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <RefreshCw size={16} />
+            <span>Analyze Another Job</span>
+          </button>
+        </div>
       </div>
     </div>
   );

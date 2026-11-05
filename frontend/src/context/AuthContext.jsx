@@ -80,6 +80,10 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem('token', newToken);
     setToken(newToken);
 
+    // Fresh login always clears previous analysis session
+    sessionStorage.removeItem('career_platform_analysis');
+    localStorage.removeItem('career_platform_analysis');
+
     // Extract basic profile from token if not explicitly provided
     if (userProfile) {
       sessionStorage.setItem('user', JSON.stringify(userProfile));
@@ -97,6 +101,8 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
+    sessionStorage.removeItem('career_platform_analysis');
+    localStorage.removeItem('career_platform_analysis');
     setToken(null);
     setUser(null);
   }, []);

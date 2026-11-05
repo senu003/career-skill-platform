@@ -76,7 +76,8 @@ def fetch_questions_for_level(
     skill: str,
     level: str,
     user_id: Optional[int] = None,
-    limit: int = 5
+    limit: int = 5,
+    topic: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     questions = (
         db.query(AssessmentQuestion)
@@ -90,6 +91,20 @@ def fetch_questions_for_level(
 
     if not questions:
         return []
+
+    # If topic specified, prioritize matching topic questions
+    if topic:
+        topic_clean = topic.strip().lower()
+        topic_qs = [
+            q for q in questions
+            if (q.topic or "").strip().lower() == topic_clean
+            or topic_clean in (q.topic or "").strip().lower()
+            or (q.topic or "").strip().lower() in topic_clean
+        ]
+        other_qs = [q for q in questions if q not in topic_qs]
+        # Only use reordered questions if there are matching questions
+        if topic_qs:
+            questions = topic_qs + other_qs
 
     seen_q_ids = set()
     if user_id is not None:
@@ -105,8 +120,10 @@ def fetch_questions_for_level(
     seen_questions = [q for q in questions if q.id in seen_q_ids]
 
     import random
-    random.shuffle(unseen_questions)
-    random.shuffle(seen_questions)
+    # If topic prioritized, shuffle within topic/non-topic blocks
+    if not topic:
+        random.shuffle(unseen_questions)
+        random.shuffle(seen_questions)
 
     if len(unseen_questions) >= limit:
         selected = unseen_questions[:limit]
@@ -205,6 +222,7 @@ def start_assessment(
     required_level: str,
     user_id: Optional[int] = None,
     analysis_id: Optional[int] = None,
+    topic: Optional[str] = None
 ) -> Dict[str, Any]:
     canonical_skill = normalize_skill(skill)
     allowed_levels = get_allowed_levels(required_level)
@@ -235,7 +253,7 @@ def start_assessment(
     db.refresh(attempt)
 
     initial_level = allowed_levels[0]
-    questions = fetch_questions_for_level(db, canonical_skill, initial_level, user_id=attempt.user_id)
+    questions = fetch_questions_for_level(db, canonical_skill, initial_level, user_id=attempt.user_id, topic=topic)
 
     return {
         "attempt_id": attempt.id,
@@ -356,7 +374,8 @@ def submit_answer(
             db.commit()
             db.refresh(attempt)
         else:
-            next_questions = fetch_questions_for_level(db, attempt.skill, new_active_level, user_id=attempt.user_id)
+            lvl_to_fetch = new_active_level or "basic"
+            next_questions = fetch_questions_for_level(db, attempt.skill, lvl_to_fetch, user_id=attempt.user_id)
     elif new_is_done:
         from app.services.skill_analysis_service import extract_assessment_scores, generate_ml_prediction
         scores = extract_assessment_scores(db, {"attempt_id": attempt.id})
@@ -410,7 +429,7 @@ def get_attempt_details(db: Session, attempt_id: int) -> Dict[str, Any]:
             "question_id": ans.question_id,
             "selected_answer": ans.selected_answer,
             "is_correct": ans.is_correct,
-            "time_taken": float(ans.time_taken) if ans.time_taken is not None else None,
+            "time_taken": float(str(ans.time_taken)) if ans.time_taken is not None else None,
             "answered_at": ans.answered_at.isoformat() if ans.answered_at else ""
         }
         for ans in answers

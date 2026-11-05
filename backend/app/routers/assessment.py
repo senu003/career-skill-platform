@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.database import SessionLocal
+from app.database import get_db
 from app.models import AssessmentAttempt, Analysis
 from app.schemas.assessment import (
     StartAssessmentRequest,
@@ -12,10 +12,21 @@ from app.schemas.assessment import (
     SubmitAnswerResponse,
     AttemptStatusResponse,
     CompleteAssessmentResponse,
-    AssessmentHistoryObservation
+    AssessmentHistoryObservation,
+    AssessmentReviewResponse,
+    TargetedRevisionResponse,
+    InterviewPrepSummaryResponse,
+    SkillAnalysisDetailResponse,
+    PersonalizedNextStepsResponse
 )
 from app.schemas.skill_analysis import AssessmentResultSchema
 from app.services import assessment_service, skill_analysis_service, longitudinal_service
+from app.services.assessment_review_service import get_assessment_review, get_user_weakness_analysis
+from app.services.interview_prep_service import (
+    get_interview_prep_summary,
+    get_skill_analysis_detail,
+    get_personalized_next_steps,
+)
 from app.auth_deps import get_current_user_required, get_current_user, User
 
 router = APIRouter(
@@ -24,12 +35,6 @@ router = APIRouter(
 )
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/supported-skills")
@@ -66,6 +71,7 @@ def start_assessment(
         required_level=payload.required_level,
         user_id=effective_user_id,
         analysis_id=payload.analysis_id,
+        topic=payload.topic,
     )
     return res
 
@@ -153,6 +159,55 @@ def get_candidate_history(user_id: int, db: Session = Depends(get_db), current_u
     return res
 
 
+@router.get("/revision/weaknesses", response_model=TargetedRevisionResponse)
+def get_user_revision_weaknesses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Returns rule-based topic accuracy, identified weakness topics, and targeted revision recommendations.
+    """
+    return get_user_weakness_analysis(db=db, user_id=cast(int, current_user.id))
+
+
+@router.get("/interview-prep/summary", response_model=InterviewPrepSummaryResponse)
+def get_interview_prep_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Returns Interview Prep Hub overview across all supported skills,
+    including latest scores, trends, overall statistics, and key takeaways.
+    """
+    return get_interview_prep_summary(db=db, user_id=cast(int, current_user.id))
+
+
+@router.get("/interview-prep/skill/{skill}", response_model=SkillAnalysisDetailResponse)
+def get_skill_prep_analysis(
+    skill: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Returns individual skill analysis with chronological score progression,
+    attempt stats, performance trend explanation, and past attempts.
+    """
+    return get_skill_analysis_detail(db=db, user_id=cast(int, current_user.id), skill_input=skill)
+
+
+@router.get("/interview-prep/next-steps", response_model=PersonalizedNextStepsResponse)
+def get_prep_next_steps(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Returns personalized next steps prioritizing repeated mistakes and persistent error topics.
+    """
+    return get_personalized_next_steps(db=db, user_id=cast(int, current_user.id))
+
+
+
+
 @router.get("/{attempt_id}", response_model=AttemptStatusResponse)
 def get_assessment_status(attempt_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user_required)):
     attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
@@ -163,6 +218,20 @@ def get_assessment_status(attempt_id: int, db: Session = Depends(get_db), curren
 
     res = assessment_service.get_attempt_details(db=db, attempt_id=attempt_id)
     return res
+
+
+@router.get("/{attempt_id}/review", response_model=AssessmentReviewResponse)
+def get_attempt_review(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Returns question-by-question review with selected answers, correct answers,
+    explanations, misconceptions, and interview tips.
+    """
+    return get_assessment_review(db=db, attempt_id=attempt_id, current_user_id=cast(int, current_user.id))
+
 
 
 @router.get("/{attempt_id}/result", response_model=AssessmentResultSchema)
@@ -181,82 +250,8 @@ def get_assessment_result_by_attempt(attempt_id: int, db: Session = Depends(get_
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Assessment attempt {attempt_id} is not yet completed."
         )
-    scores = skill_analysis_service.extract_assessment_scores(db, {"attempt_id": attempt.id})
-    total_score = scores.get("total_score") if scores else None
+    return skill_analysis_service.build_assessment_attempt_result(db=db, attempt=attempt)
 
-    assessed_lvl = attempt.assessed_level
-    if not assessed_lvl and scores:
-        assessed_lvl = skill_analysis_service.generate_ml_prediction(
-            matched=True,
-            required_level=cast(str, attempt.required_level),
-            importance="required",
-            scores=scores
-        )
-        if assessed_lvl and attempt.assessed_level != assessed_lvl:
-            attempt.assessed_level = assessed_lvl
-            db.commit()
-
-    gap = skill_analysis_service.calculate_level_gap(cast(Optional[str], attempt.required_level), cast(Optional[str], assessed_lvl))
-    weakness_info = skill_analysis_service.calculate_weakness(level_gap=gap, total_score=total_score)
-    rec_info = skill_analysis_service.generate_recommendation(
-        skill=cast(str, attempt.skill),
-        required_level=cast(Optional[str], attempt.required_level),
-        assessed_level=cast(Optional[str], assessed_lvl),
-        level_gap=gap,
-        total_score=total_score,
-        is_weakness=weakness_info["is_weakness"],
-        weakness_reason=weakness_info["weakness_reason"]
-    )
-
-    from app.services.longitudinal_service import predict_skill_improvement_from_history
-    improvement_prob = predict_skill_improvement_from_history(
-        db=db,
-        user_id=cast(Optional[int], attempt.user_id),
-        skill=cast(str, attempt.skill),
-        current_attempt_id=cast(Optional[int], attempt.id)
-    )
-
-    # Calculate retake telemetry (attempt_count and previous_best_score)
-    all_attempts = db.query(AssessmentAttempt).filter(
-        AssessmentAttempt.user_id == attempt.user_id,
-        AssessmentAttempt.completed_at.isnot(None),
-        func.lower(AssessmentAttempt.skill) == attempt.skill.strip().lower()
-    ).order_by(AssessmentAttempt.completed_at.asc(), AssessmentAttempt.id.asc()).all()
-    attempt_count = max(1, len(all_attempts))
-    prior_scores = []
-    for att in all_attempts:
-        if att.id != attempt.id:
-            att_scores = skill_analysis_service.extract_assessment_scores(db, {"attempt_id": att.id})
-            if att_scores and att_scores.get("total_score") is not None:
-                prior_scores.append(float(att_scores["total_score"]))
-    previous_best_score = max(prior_scores) if prior_scores else (total_score if total_score is not None else None)
-
-    model1_rec, model1_conf = skill_analysis_service.generate_model1_evaluator_output(
-        required_level=cast(str, attempt.required_level),
-        assessed_level=cast(Optional[str], assessed_lvl),
-        scores=scores,
-        cv_level=cast(Optional[str], attempt.cv_level),
-        attempt_count=attempt_count,
-        previous_best_score=previous_best_score
-    )
-
-    return {
-        "attempt_id": attempt.id,
-        "skill": attempt.skill,
-        "required_level": attempt.required_level,
-        "assessed_level": assessed_lvl,
-        "level_gap": gap,
-        "total_score": total_score,
-        "is_weakness": weakness_info["is_weakness"],
-        "weakness_reason": weakness_info["weakness_reason"],
-        "priority": rec_info["priority"],
-        "recommendation": rec_info["recommendation"],
-        "recommendation_reason": rec_info["reason"],
-        "skill_recommendation": model1_rec,
-        "recommendation_confidence": model1_conf,
-        "improvement_probability": improvement_prob,
-        "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None
-    }
 
 
 @router.post("/{attempt_id}/complete", response_model=CompleteAssessmentResponse)

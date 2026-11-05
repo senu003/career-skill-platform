@@ -4,6 +4,8 @@ import { Clock, ArrowRight, AlertCircle, RefreshCw, CheckCircle, ArrowLeft } fro
 import { fetchWithAuth } from '../api';
 import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
+import { formatLevel, formatTime } from '../utils/formatters';
+
 
 export default function AssessmentPage() {
   const { skill } = useParams();
@@ -29,18 +31,7 @@ export default function AssessmentPage() {
   const [error, setError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
 
-  // Format Helper: Capitalize text strings safely
-  const formatLevel = (lvl) => {
-    if (!lvl) return 'N/A';
-    return lvl.charAt(0).toUpperCase() + lvl.slice(1).toLowerCase();
-  };
 
-  // Format Helper: Format timer as 00:00 or seconds
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // Determine required level from AssessmentContext or return 'unspecified'
   const getRequiredLevel = useCallback(() => {
@@ -86,6 +77,8 @@ export default function AssessmentPage() {
 
   const nextSupportedSkill = getNextSupportedSkill();
 
+  const topicParam = searchParams.get('topic');
+
   // Assessment Setup with specific target level (POST /assessment/start)
   const startAssessmentWithLevel = useCallback(async (targetLevel) => {
     if (!normalizedSkill || !targetLevel) {
@@ -106,6 +99,7 @@ export default function AssessmentPage() {
           skill: normalizedSkill,
           required_level: targetLevel,
           ...(analysisId ? { analysis_id: Number(analysisId) } : {}),
+          ...(topicParam ? { topic: topicParam } : {}),
         }),
       });
 
@@ -125,7 +119,7 @@ export default function AssessmentPage() {
     } finally {
       setLoading(false);
     }
-  }, [normalizedSkill, analysisId]);
+  }, [normalizedSkill, analysisId, topicParam]);
 
   useEffect(() => {
     if (!normalizedSkill) {
@@ -405,7 +399,22 @@ export default function AssessmentPage() {
     <div className="assessment-container fade-in">
       {/* 1. HEADER SECTION */}
       <div className="page-header text-center mb-6">
-        <span className="badge badge-purple mb-2">Technical Assessment</span>
+        <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
+          <span className="badge badge-purple">Technical Assessment</span>
+          {topicParam && (
+            <span
+              className="badge"
+              style={{
+                backgroundColor: '#fef3c7',
+                color: '#92400e',
+                border: '1px solid #fde68a',
+                fontWeight: 600,
+              }}
+            >
+              Targeted Practice: {topicParam}
+            </span>
+          )}
+        </div>
         <h1 className="page-title">{normalizedSkill}</h1>
         <p className="page-subtitle font-semibold" style={{ color: 'var(--primary-700)' }}>
           Required Level: {formatLevel(requiredLevelState)}
@@ -425,15 +434,28 @@ export default function AssessmentPage() {
 
       {/* 3. QUESTION CARD */}
       <div className="card">
-        {/* Card Header Info (Difficulty + Timer) */}
+        {/* Card Header Info (Difficulty + Topic + Timer) */}
         <div className="flex justify-between items-center mb-4 pb-3" style={{ borderBottom: '1px solid var(--border-color)' }}>
-          {currentQuestion.level ? (
-            <span className="badge badge-purple">
-              {formatLevel(currentQuestion.level)} Level
-            </span>
-          ) : (
-            <span />
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {currentQuestion.level && (
+              <span className="badge badge-purple">
+                {formatLevel(currentQuestion.level)} Level
+              </span>
+            )}
+            {currentQuestion.topic && (
+              <span
+                className="badge"
+                style={{
+                  backgroundColor: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.75rem',
+                }}
+              >
+                Topic: {currentQuestion.topic}
+              </span>
+            )}
+          </div>
 
           <div className="timer-badge">
             <Clock size={14} />

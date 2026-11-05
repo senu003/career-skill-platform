@@ -31,7 +31,6 @@ from typing import Optional
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth_deps import (
@@ -39,9 +38,16 @@ from app.auth_deps import (
     create_access_token,
     get_current_user_required,
 )
-from app.database import SessionLocal
+from app.database import get_db
 from app.models import PasswordResetToken, SecurityAuditLog, User
 from app.services.google_auth_service import verify_google_token
+from app.schemas.auth import (
+    RegisterRequest,
+    GoogleLoginRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    ChangePasswordRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +58,6 @@ RESET_TOKEN_EXPIRE_MINUTES = 60
 # Bcrypt work factor — 12 is a solid production default
 BCRYPT_ROUNDS = 12
 
-
-# ─── DB Dependency ────────────────────────────────────────────────────────────
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -138,73 +135,8 @@ def _issue_token(user: User) -> dict:
     }
 
 
-# ─── Request / Response Schemas ───────────────────────────────────────────────
-
-class RegisterRequest(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit.")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("Password must contain at least one letter.")
-        return v
-
-    @field_validator("name")
-    @classmethod
-    def name_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Name cannot be blank.")
-        return v.strip()
-
-
-class GoogleLoginRequest(BaseModel):
-    credential: str  # Google ID token from the client
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit.")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("Password must contain at least one letter.")
-        return v
-
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters.")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit.")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("Password must contain at least one letter.")
-        return v
-
-
 # ─── Endpoints ────────────────────────────────────────────────────────────────
+
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):

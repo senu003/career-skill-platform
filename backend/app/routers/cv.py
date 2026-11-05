@@ -1,12 +1,21 @@
 import json
 import os
+import logging
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, Depends, Request
+from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, Depends, Request, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
-from app.database import SessionLocal
-from app.services.cv_service import process_cv, extract_pdf_text
+from app.database import get_db
+from app.services.cv_service import (
+    process_cv,
+    extract_pdf_text,
+    parse_and_validate_requirements,
+    get_candidate_sessions,
+    get_candidate_session_detail,
+)
 from app.services.requirement_service import extract_requirements, evaluate_cv_with_gemini
 from app.services.matching_service import match_skills_in_text
 from app.services.scoring_service import calculate_skill_score
@@ -17,75 +26,13 @@ from app.models import CV, Job, Analysis
 from app.rate_limiter import limiter, RATE_LIMIT_CV_ANALYZE
 from app.services.storage_service import get_storage_backend
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
-def parse_and_validate_requirements(requirements_str: str) -> List[Dict[str, Any]]:
-    """
-    Parses and validates the JSON string containing skill requirements.
-    Enforces required structure: non-empty list of dicts with 'skill', 'level', 'importance'.
-    """
-    if not requirements_str or not requirements_str.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements string cannot be empty."
-        )
-
-    try:
-        data = json.loads(requirements_str)
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid requirements JSON format."
-        )
-
-    if not isinstance(data, list):
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements JSON must be a list."
-        )
-
-    if len(data) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Requirements list cannot be empty."
-        )
-
-    for idx, item in enumerate(data):
-        if not isinstance(item, dict):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Requirement item at index {idx} must be an object."
-            )
-
-        if "skill" not in item or not isinstance(item["skill"], str) or not item["skill"].strip():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Requirement item at index {idx} missing 'skill'."
-            )
-
-        if "level" not in item or not isinstance(item["level"], str) or not item["level"].strip():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Requirement item at index {idx} missing 'level'."
-            )
-
-        if "importance" not in item or not isinstance(item["importance"], str) or not item["importance"].strip():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Requirement item at index {idx} missing 'importance'."
-            )
-
-    return data
 
 
 @router.get("/cv/latest")
@@ -108,6 +55,134 @@ def get_latest_cv(
             "uploaded_at": cv_up.isoformat() if cv_up is not None else None
         }
     }
+
+
+@router.get("/cv/all")
+def get_all_cvs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Retrieves all uploaded CV records for the authenticated candidate with analysis counts.
+    """
+    cv_records = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.uploaded_at.desc()).all()
+    if not cv_records:
+        return {"has_cv": False, "count": 0, "cvs": []}
+
+    # Count analyses per CV
+    analysis_counts = {}
+    counts = (
+        db.query(Analysis.cv_id, func.count(Analysis.id))
+        .filter(Analysis.user_id == current_user.id)
+        .group_by(Analysis.cv_id)
+        .all()
+    )
+    for cid, cnt in counts:
+        if cid is not None:
+            analysis_counts[cid] = cnt
+
+    latest_id = cv_records[0].id if cv_records else None
+
+    cvs = []
+    for cv in cv_records:
+        cv_up = getattr(cv, "uploaded_at", None)
+        cvs.append({
+            "id": getattr(cv, "id", None),
+            "file_name": getattr(cv, "file_name", None),
+            "uploaded_at": cv_up.isoformat() if cv_up is not None else None,
+            "is_default": (cv.id == latest_id),
+            "analyses_count": analysis_counts.get(cv.id, 0)
+        })
+
+    return {
+        "has_cv": True,
+        "count": len(cvs),
+        "cvs": cvs
+    }
+
+
+@router.post("/cv/{cv_id}/set-default")
+def set_default_cv(
+    cv_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Sets a CV as the default/active CV by updating its uploaded_at timestamp.
+    """
+    cv = db.query(CV).filter(CV.id == cv_id, CV.user_id == current_user.id).first()
+    if not cv:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    cv.uploaded_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "CV set as default", "id": cv_id}
+
+
+@router.get("/cv/{cv_id}/download")
+def download_cv(
+    cv_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Downloads or previews an uploaded CV file.
+    """
+    cv = db.query(CV).filter(CV.id == cv_id, CV.user_id == current_user.id).first()
+    if not cv:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    file_bytes = None
+    try:
+        storage = get_storage_backend()
+        file_bytes = storage.get_file_bytes(cv.file_path)
+    except Exception:
+        if cv.file_path and os.path.exists(cv.file_path):
+            with open(cv.file_path, "rb") as f:
+                file_bytes = f.read()
+
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="CV file could not be retrieved")
+
+    safe_filename = os.path.basename(cv.file_name or f"resume_{cv_id}.pdf")
+    return Response(
+        content=file_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_filename}"'
+        }
+    )
+
+
+@router.delete("/cv/{cv_id}")
+def delete_cv(
+    cv_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Deletes an uploaded CV file if not linked to existing analyses.
+    """
+    cv = db.query(CV).filter(CV.id == cv_id, CV.user_id == current_user.id).first()
+    if not cv:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    linked_analyses = db.query(Analysis).filter(Analysis.cv_id == cv_id).count()
+    if linked_analyses > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This CV cannot be deleted because it is linked to {linked_analyses} historical analysis session(s)."
+        )
+
+    try:
+        storage = get_storage_backend()
+        storage.delete_file(cv.file_path)
+    except Exception as e:
+        logger.warning(f"Failed to delete physical CV file: {e}")
+
+    db.delete(cv)
+    db.commit()
+    return {"message": "CV deleted successfully", "id": cv_id}
 
 
 @router.get("/cv/sessions")
@@ -306,6 +381,8 @@ def get_analysis_session_detail(
     result["company"] = job_record.company if job_record else ""
     result["analysis_id"] = analysis_record_id
     return result
+
+
 
 
 

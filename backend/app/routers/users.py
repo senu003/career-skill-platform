@@ -1,31 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 import bcrypt
 from datetime import timedelta
 
-from ..database import SessionLocal
+from ..database import get_db
 from ..models import User
 from app.auth_deps import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user_required
+from app.schemas.auth import UserCreate
 
 
 router = APIRouter()
 
-
-class UserCreate(BaseModel):
-    name: str
-    email: str
-    password: str
-
-
-def get_db():
-    db = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/users/me")
