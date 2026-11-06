@@ -10,6 +10,7 @@ import {
   demoLogin,
   forgotPassword,
   resetPassword,
+  getPasswordResetStatus,
 } from '../api';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -46,7 +47,7 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [devResetToken, setDevResetToken] = useState(null);
+  const [resetStatus, setResetStatus] = useState({ enabled: true, checked: false, message: '' });
 
   const { login, isAuthenticated } = useAuth();
   const { clearAnalysis } = useAssessment();
@@ -61,6 +62,29 @@ export default function LoginPage() {
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard', { replace: true });
   }, [isAuthenticated, navigate]);
+
+  // Check password reset availability
+  useEffect(() => {
+    let active = true;
+    getPasswordResetStatus()
+      .then((data) => {
+        if (active && data && typeof data.enabled === 'boolean') {
+          setResetStatus({
+            enabled: data.enabled,
+            checked: true,
+            message: data.message || '',
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setResetStatus((prev) => ({ ...prev, checked: true }));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const clearMessages = () => { setError(null); setSuccess(null); };
 
@@ -119,7 +143,9 @@ export default function LoginPage() {
   };
 
   const handleGoogleError = () => {
-    setError('Google sign-in was cancelled or failed. Please try again.');
+    setError(
+      'Google sign-in was cancelled or origin is not authorized. If testing locally, ensure http://localhost:5173 is added to Authorized JavaScript origins in Google Cloud Console, or use One-Click Test Login.'
+    );
   };
 
   // ── Instant Demo Login ──────────────────────────────────────────────────────
@@ -140,13 +166,14 @@ export default function LoginPage() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     clearMessages();
+    if (!resetStatus.enabled) {
+      setError(resetStatus.message || 'Password reset is currently unavailable in this environment.');
+      return;
+    }
     setLoading(true);
     try {
       const data = await forgotPassword(email.trim());
-      setSuccess(data.message || 'Reset link sent! Check your email.');
-      if (data.dev_reset_token) {
-        setDevResetToken(data.dev_reset_token);
-      }
+      setSuccess(data.message || 'If an account with that email exists, a reset link has been sent.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -158,6 +185,10 @@ export default function LoginPage() {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     clearMessages();
+    if (!resetStatus.enabled) {
+      setError(resetStatus.message || 'Password reset is currently unavailable in this environment.');
+      return;
+    }
     if (!resetToken.trim()) { setError('Please enter or paste your reset token.'); return; }
     setLoading(true);
     try {
@@ -448,20 +479,34 @@ export default function LoginPage() {
                 </div>
 
                 <div style={{ textAlign: 'right', marginBottom: '1.25rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => { setView(VIEW.FORGOT); clearMessages(); }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--primary-400)',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Forgot password?
-                  </button>
+                  {resetStatus.checked && !resetStatus.enabled ? (
+                    <span
+                      style={{
+                        color: 'var(--text-muted, #64748b)',
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                        cursor: 'not-allowed',
+                      }}
+                      title="Password reset is currently unavailable"
+                    >
+                      Forgot password? (Unavailable)
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setView(VIEW.FORGOT); clearMessages(); }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary-400)',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                 </div>
 
                 <button
@@ -620,78 +665,66 @@ export default function LoginPage() {
 
           {/* ─────────── FORGOT PASSWORD ─────────── */}
           {view === VIEW.FORGOT && (
-            <form onSubmit={handleForgotPassword}>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                Enter the email linked to your account and we'll send you a reset link.
-              </p>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={labelStyle}>Email Address</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  background: loading ? 'var(--primary-800)' : 'var(--primary-600)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {loading ? 'Sending…' : 'Send Reset Link'}
-              </button>
-
-              {/* Dev-only: display the raw token so you can test without email */}
-              {devResetToken && (
+            <div>
+              {!resetStatus.enabled ? (
                 <div
                   style={{
-                    marginTop: '1rem',
-                    background: 'rgba(251,191,36,0.1)',
-                    border: '1px solid rgba(251,191,36,0.4)',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
                     borderRadius: '0.5rem',
-                    padding: '0.75rem',
+                    padding: '1.25rem',
+                    marginBottom: '1.25rem',
+                    textAlign: 'center',
                   }}
                 >
-                  <p style={{ color: '#fbbf24', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                    🔧 DEV MODE — Reset Token (remove in production):
+                  <p style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                    Password Reset Unavailable
                   </p>
-                  <code
-                    style={{
-                      fontSize: '0.75rem',
-                      wordBreak: 'break-all',
-                      color: '#fcd34d',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => {
-                      setResetToken(devResetToken);
-                      setView(VIEW.RESET);
-                    }}
-                    title="Click to use this token"
-                  >
-                    {devResetToken}
-                  </code>
-                  <p style={{ color: '#fbbf24', fontSize: '0.72rem', marginTop: '0.35rem' }}>
-                    Click the token to proceed to password reset.
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, margin: 0 }}>
+                    {resetStatus.message ||
+                      'Password reset is currently disabled because secure email delivery is not configured. Please contact support or your administrator.'}
                   </p>
                 </div>
+              ) : (
+                <form onSubmit={handleForgotPassword}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                    Enter the email linked to your account and we'll send you a reset link.
+                  </p>
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={labelStyle}>Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: loading ? 'var(--primary-800)' : 'var(--primary-600)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {loading ? 'Sending…' : 'Send Reset Link'}
+                  </button>
+                </form>
               )}
 
               <button
                 type="button"
-                onClick={() => { setView(VIEW.LOGIN); clearMessages(); setDevResetToken(null); }}
+                onClick={() => { setView(VIEW.LOGIN); clearMessages(); }}
                 style={{
                   marginTop: '0.75rem',
                   width: '100%',
@@ -707,62 +740,104 @@ export default function LoginPage() {
               >
                 ← Back to Sign In
               </button>
-            </form>
+            </div>
           )}
 
           {/* ─────────── RESET PASSWORD ─────────── */}
           {view === VIEW.RESET && (
-            <form onSubmit={handleResetPassword}>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                Paste your reset token and set a new password.
-              </p>
-
-              {!searchParams.get('token') && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={labelStyle}>Reset Token</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Paste token from email"
-                    value={resetToken}
-                    onChange={(e) => setResetToken(e.target.value)}
-                    style={inputStyle}
-                  />
+            <div>
+              {!resetStatus.enabled ? (
+                <div
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '0.5rem',
+                    padding: '1.25rem',
+                    marginBottom: '1.25rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                    Password Reset Unavailable
+                  </p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, margin: 0 }}>
+                    {resetStatus.message ||
+                      'Password reset is currently disabled because secure email delivery is not configured. Please contact support or your administrator.'}
+                  </p>
                 </div>
+              ) : (
+                <form onSubmit={handleResetPassword}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                    Paste your reset token and set a new password.
+                  </p>
+
+                  {!searchParams.get('token') && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label style={labelStyle}>Reset Token</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Paste token from email"
+                        value={resetToken}
+                        onChange={(e) => setResetToken(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                  )}
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={labelStyle}>New Password</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Min. 8 chars, 1 letter, 1 digit"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      style={inputStyle}
+                      autoComplete="new-password"
+                    />
+                    <PasswordStrength password={newPassword} />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: loading ? 'var(--primary-800)' : 'var(--primary-600)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '0.5rem',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {loading ? 'Updating…' : 'Update Password'}
+                  </button>
+                </form>
               )}
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={labelStyle}>New Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Min. 8 chars, 1 letter, 1 digit"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  style={inputStyle}
-                  autoComplete="new-password"
-                />
-                <PasswordStrength password={newPassword} />
-              </div>
-
               <button
-                type="submit"
-                disabled={loading}
+                type="button"
+                onClick={() => { setView(VIEW.LOGIN); clearMessages(); }}
                 style={{
+                  marginTop: '0.75rem',
                   width: '100%',
-                  padding: '0.75rem',
-                  background: loading ? 'var(--primary-800)' : 'var(--primary-600)',
-                  color: '#fff',
-                  border: 'none',
+                  padding: '0.6rem',
+                  background: 'transparent',
+                  border: '1.5px solid var(--border-color)',
                   borderRadius: '0.5rem',
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
-                  cursor: loading ? 'not-allowed' : 'pointer',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: '0.9rem',
                 }}
               >
-                {loading ? 'Updating…' : 'Update Password'}
+                ← Back to Sign In
               </button>
-            </form>
+            </div>
           )}
 
           {/* ─────────── RESET DONE ─────────── */}

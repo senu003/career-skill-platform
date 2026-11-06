@@ -33,6 +33,7 @@ def verify_google_token(token: str) -> Optional[Dict[str, Any]]:
             return None
 
         return {
+            "sub": idinfo.get("sub"),
             "google_id": idinfo.get("sub"),
             "email": idinfo.get("email"),
             "name": idinfo.get("name", ""),

@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import { API_BASE_URL } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -98,7 +99,20 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const curToken = sessionStorage.getItem('token');
+    if (curToken) {
+      try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${curToken}`,
+          },
+        });
+      } catch {
+        // Safe to ignore network or server failure during client logout
+      }
+    }
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('career_platform_analysis');

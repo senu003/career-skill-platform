@@ -102,5 +102,37 @@ class TestAuthSecurity(unittest.TestCase):
         res = self.client.get(f"/assessment/{attempt_id}", headers={"Authorization": f"Bearer {self.token_a}"})
         self.assertEqual(res.status_code, 403)
 
+    def test_token_rejected_after_account_deactivation(self):
+        # Candidate A has a valid token
+        res_before = self.client.get(f"/assessment/history/{self.cand_a_id}", headers={"Authorization": f"Bearer {self.token_a}"})
+        self.assertEqual(res_before.status_code, 200)
+
+        # Deactivate Candidate A
+        self.db.execute(text("UPDATE users SET is_active = FALSE WHERE id = :uid"), {"uid": self.cand_a_id})
+        self.db.commit()
+
+        # Token issued prior to deactivation must now be rejected
+        res_after = self.client.get(f"/assessment/history/{self.cand_a_id}", headers={"Authorization": f"Bearer {self.token_a}"})
+        self.assertEqual(res_after.status_code, 401)
+        self.assertIn("Account is deactivated", res_after.json().get("detail", ""))
+
+        # Reactivate Candidate A
+        self.db.execute(text("UPDATE users SET is_active = TRUE WHERE id = :uid"), {"uid": self.cand_a_id})
+        self.db.commit()
+
+    def test_logout_token_revocation(self):
+        # Access before logout succeeds
+        res_before = self.client.get(f"/assessment/history/{self.cand_b_id}", headers={"Authorization": f"Bearer {self.token_b}"})
+        self.assertEqual(res_before.status_code, 200)
+
+        # Logout Candidate B
+        logout_res = self.client.post("/auth/logout", headers={"Authorization": f"Bearer {self.token_b}"})
+        self.assertEqual(logout_res.status_code, 200)
+
+        # Reusing the logged-out token must be rejected
+        res_after = self.client.get(f"/assessment/history/{self.cand_b_id}", headers={"Authorization": f"Bearer {self.token_b}"})
+        self.assertEqual(res_after.status_code, 401)
+        self.assertIn("Token has been revoked", res_after.json().get("detail", ""))
+
 if __name__ == "__main__":
     unittest.main()

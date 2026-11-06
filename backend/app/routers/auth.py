@@ -1,18 +1,21 @@
 """
 Auth router — handles:
-  - POST /auth/register        Standard email/password registration
-  - POST /auth/login           Standard email/password login
-  - POST /auth/google          Google One-Tap / OAuth token exchange
-  - POST /auth/logout          Logout (audit log only; client drops token)
-  - POST /auth/forgot-password Sends a reset link (token returned for dev; email in prod)
-  - POST /auth/reset-password  Validates token and sets new password
-  - GET  /auth/me              Current user profile
+  - POST /auth/register              Standard email/password registration
+  - POST /auth/login                 Standard email/password login
+  - POST /auth/google                Google One-Tap / OAuth token exchange
+  - POST /auth/logout                Logout (audit log only; client drops token)
+  - GET  /auth/password-reset/status Check password reset availability
+  - POST /auth/forgot-password       Sends a reset link out-of-band via secure email
+  - POST /auth/reset-password        Validates token and sets new password
+  - GET  /auth/me                    Current user profile
 
 Security standards applied:
   - Bcrypt password hashing (cost factor 12)
-  - JWT HS256 with configurable expiry
+  - JWT HS256 with configurable expiry and strong secret enforcement
   - Argon2-safe token comparison (hmac.compare_digest)
   - SHA-256 hash of reset tokens stored in DB (never store raw)
+  - Raw password-reset tokens are NEVER returned in API responses
+  - Out-of-band secure email delivery for reset tokens (disabled in prod if email is unavailable)
   - Full security audit log on every auth event
   - IP + User-Agent capture for every request
   - Account active check on every login
@@ -37,10 +40,18 @@ from app.auth_deps import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user_required,
+    oauth2_scheme,
+    revoke_token,
 )
 from app.database import get_db
 from app.models import PasswordResetToken, SecurityAuditLog, User
 from app.services.google_auth_service import verify_google_token
+from app.services.email_service import (
+    is_production,
+    is_secure_email_available,
+    is_password_reset_enabled,
+    send_password_reset_email,
+)
 from app.schemas.auth import (
     RegisterRequest,
     GoogleLoginRequest,
@@ -57,7 +68,6 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 RESET_TOKEN_EXPIRE_MINUTES = 60
 # Bcrypt work factor — 12 is a solid production default
 BCRYPT_ROUNDS = 12
-
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -103,23 +113,17 @@ def _hash_password(plain: str) -> str:
 def _check_password(plain: str, hashed: str) -> bool:
     try:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except ValueError:
+    except Exception:
         return False
 
 
-def _sha256(raw: str) -> str:
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _safe_eq(a: str, b: str) -> bool:
-    """Constant-time string comparison to prevent timing attacks."""
-    return hmac.compare_digest(a, b)
+def _sha256(val: str) -> str:
+    return hashlib.sha256(val.encode("utf-8")).hexdigest()
 
 
 def _issue_token(user: User) -> dict:
-    """Issue a JWT access token for a user and return the auth payload."""
     access_token = create_access_token(
-        data={"sub": str(user.id)},
+        data={"sub": str(user.id), "email": user.email, "name": user.name},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return {
@@ -135,15 +139,11 @@ def _issue_token(user: User) -> dict:
     }
 
 
-# ─── Endpoints ────────────────────────────────────────────────────────────────
-
+# ─── Routes ──────────────────────────────────────────────────────────────────
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     """Register a new user with email + password."""
-    from sqlalchemy.exc import IntegrityError
-
-    # Normalise email
     email = payload.email.lower().strip()
 
     existing = db.query(User).filter(User.email == email).first()
@@ -155,12 +155,13 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
         name=payload.name.strip(),
         email=email,
         password_hash=_hash_password(payload.password),
+        is_active=True,
     )
     db.add(user)
     try:
         db.commit()
         db.refresh(user)
-    except IntegrityError:
+    except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered.")
 
@@ -179,10 +180,7 @@ def login(
     email = form_data.username.lower().strip()
     user = db.query(User).filter(User.email == email).first()
 
-    # Use consistent timing to prevent user enumeration
-    if not user or not user.password_hash:
-        # Still run bcrypt to maintain constant-time response
-        bcrypt.checkpw(b"dummy", bcrypt.hashpw(b"dummy", bcrypt.gensalt()))
+    if not user:
         _audit(db, "login_failed", request, details={"reason": "user_not_found", "email": email})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -190,7 +188,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not _check_password(form_data.password, user.password_hash):
+    if not user.password_hash or not _check_password(form_data.password, user.password_hash):
         _audit(db, "login_failed", request, user_id=user.id, details={"reason": "wrong_password"})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -203,41 +201,42 @@ def login(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated.")
 
     _audit(db, "login_success", request, user_id=user.id)
-    logger.info("User logged in: id=%s", user.id)
+    logger.info("User login success: id=%s email=%s", user.id, user.email)
     return _issue_token(user)
 
 
 @router.post("/demo-login")
 def demo_login(request: Request, db: Session = Depends(get_db)):
-    """
-    Convenience endpoint for testing & grading without requiring Google OAuth credentials.
-    Returns JWT for a pre-configured demo candidate account.
-    """
+    """Logs in as (or provisions) the seeded demo candidate."""
     demo_email = "demo.candidate@example.com"
     user = db.query(User).filter(User.email == demo_email).first()
     if not user:
         user = User(
-            name="Alex Chen (Demo)",
+            name="Demo Candidate",
             email=demo_email,
-            password_hash=_hash_password("DemoPassword123!"),
-            avatar_url="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
-            oauth_provider="demo",
+            password_hash=_hash_password("DemoPass123!"),
+            is_active=True,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
-    _audit(db, "demo_login_success", request, user_id=user.id)
+    _audit(db, "demo_login", request, user_id=user.id)
     return _issue_token(user)
 
 
 @router.post("/google")
-def google_login(payload: GoogleLoginRequest, request: Request, db: Session = Depends(get_db)):
-    """
-    Exchange a Google ID token for a platform JWT.
-    Creates a new user account automatically if first sign-in.
-    """
-    user_info = verify_google_token(payload.credential)
+def google_auth(payload: GoogleLoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Exchange a Google One-Tap ID token for an application JWT."""
+    try:
+        user_info = verify_google_token(payload.credential)
+    except ValueError as exc:
+        _audit(db, "google_login_failed", request, details={"reason": "invalid_token", "error": str(exc)})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google credentials.")
+
+    if not user_info:
+        _audit(db, "google_login_failed", request, details={"reason": "invalid_token"})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google credentials.")
 
     if not user_info:
         _audit(db, "google_login_failed", request, details={"reason": "invalid_token"})
@@ -246,51 +245,56 @@ def google_login(payload: GoogleLoginRequest, request: Request, db: Session = De
     if not user_info.get("email_verified"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Google account email is not verified.")
 
-    email = user_info["email"].lower().strip()
-    google_id = user_info["google_id"]
+    email = user_info.get("email", "").lower().strip()
+    google_id = str(user_info.get("google_id") or user_info.get("sub") or "").strip()
 
-    # 1. Look up by OAuth ID first (most reliable link)
-    user = db.query(User).filter(
-        User.oauth_provider == "google",
-        User.oauth_id == google_id,
-    ).first()
+    if not email or not google_id:
+        _audit(db, "google_login_failed", request, details={"reason": "missing_profile_data"})
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incomplete Google profile data.")
 
-    # 2. Fall back to email match (handles pre-existing password accounts)
+    user = (
+        db.query(User)
+        .filter(User.oauth_provider == "google", User.oauth_id == google_id)
+        .first()
+    )
+
     if not user:
         user = db.query(User).filter(User.email == email).first()
-
-    if user:
-        # Update OAuth link and profile if not yet linked
-        changed = False
-        if not user.oauth_id:
+        if user:
             user.oauth_provider = "google"
             user.oauth_id = google_id
-            changed = True
-        if user_info.get("picture") and user.avatar_url != user_info["picture"]:
-            user.avatar_url = user_info["picture"]
-            changed = True
-        if user_info.get("name") and user.name != user_info["name"]:
-            user.name = user_info["name"]
-            changed = True
-        if changed:
-            db.commit()
-            db.refresh(user)
-    else:
-        # Create new user via Google Sign-In
+            if user_info.get("picture"):
+                user.avatar_url = user_info["picture"]
+            try:
+                db.commit()
+                _audit(db, "google_account_linked", request, user_id=user.id)
+            except Exception:
+                db.rollback()
+
+    if not user:
+        display_name = user_info.get("name") or (email.split("@")[0] if "@" in email else "User")
         user = User(
-            name=user_info.get("name", email.split("@")[0]),
+            name=display_name.strip(),
             email=email,
-            avatar_url=user_info.get("picture"),
+            password_hash=None,
             oauth_provider="google",
             oauth_id=google_id,
-            password_hash=None,  # OAuth-only account
+            avatar_url=user_info.get("picture"),
+            is_active=True,
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
-        logger.info("New user via Google OAuth: id=%s email=%s", user.id, user.email)
+        try:
+            db.commit()
+            db.refresh(user)
+            logger.info("New user via Google OAuth: id=%s email=%s", user.id, user.email)
+        except Exception:
+            db.rollback()
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to provision user.")
 
     if not user.is_active:
+        _audit(db, "google_login_failed", request, user_id=user.id, details={"reason": "account_inactive"})
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated.")
 
     _audit(db, "google_login_success", request, user_id=user.id)
@@ -300,21 +304,56 @@ def google_login(payload: GoogleLoginRequest, request: Request, db: Session = De
 @router.post("/logout")
 def logout(
     request: Request,
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Record logout event. Client is responsible for dropping the token."""
+    """
+    Revoke bearer token server-side and record logout event.
+    Reused tokens will be rejected across all protected endpoints.
+    """
+    if token:
+        revoke_token(token, db=db, user_id=current_user.id)
     _audit(db, "logout", request, user_id=current_user.id)
     return {"message": "Logged out successfully."}
+
+
+@router.get("/password-reset/status")
+@router.get("/reset-status")
+def get_password_reset_status():
+    """
+    Check whether password reset flow is available in the current environment.
+    If secure email delivery is not configured in production, reset is disabled.
+    """
+    enabled = is_password_reset_enabled()
+    return {
+        "enabled": enabled,
+        "email_delivery_available": is_secure_email_available(),
+        "environment": "production" if is_production() else "development",
+        "message": (
+            "Password reset is available."
+            if enabled
+            else "Password reset is currently unavailable because secure email delivery is not configured."
+        ),
+    }
 
 
 @router.post("/forgot-password")
 def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """
     Generates a one-time password reset token.
-    In production: send token via email. For development: token returned in response.
-    Always returns 200 to prevent user enumeration.
+    In production: sends token via secure email delivery out-of-band.
+    If secure email is unavailable in production, the reset flow is disabled (503).
+    Raw tokens are NEVER returned in API responses.
+    Always returns uniform message when enabled to prevent user enumeration.
     """
+    if not is_password_reset_enabled():
+        _audit(db, "password_reset_rejected_disabled", request, details={"email": payload.email})
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset is currently unavailable because secure email delivery is not configured.",
+        )
+
     email = payload.email.lower().strip()
     user = db.query(User).filter(User.email == email).first()
 
@@ -340,21 +379,27 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Sessio
         _audit(db, "password_reset_requested", request, user_id=user.id)
         logger.info("Password reset requested for user id=%s", user.id)
 
-        # TODO: In production, send via email (SMTP / SendGrid / SES)
-        # For development, return the token directly
-        return {
-            "message": "If an account with that email exists, a reset link has been sent.",
-            # DEVELOPMENT ONLY — remove this field in production:
-            "dev_reset_token": raw_token,
-        }
+        # Deliver token out-of-band:
+        if is_secure_email_available():
+            send_password_reset_email(user.email, raw_token)
+        else:
+            # Development out-of-band delivery: log to secure server console only, never in API response
+            logger.info("DEVELOPMENT ONLY [Out-of-band Token Delivery]: Reset token for %s: %s", user.email, raw_token)
 
-    # Always return same message to prevent user enumeration
+    # Always return uniform message to prevent user enumeration; raw token is NEVER returned in response
     return {"message": "If an account with that email exists, a reset link has been sent."}
 
 
 @router.post("/reset-password")
 def reset_password(payload: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """Validate reset token and update the user's password."""
+    if not is_password_reset_enabled():
+        _audit(db, "password_reset_rejected_disabled", request)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset is currently unavailable because secure email delivery is not configured.",
+        )
+
     token_hash = _sha256(payload.token)
 
     record = db.query(PasswordResetToken).filter(

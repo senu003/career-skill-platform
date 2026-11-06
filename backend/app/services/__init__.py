@@ -5,6 +5,7 @@ from . import requirement_service
 from . import scoring_service
 from . import assessment_service
 from . import skill_analysis_service
+from . import email_service
 
 __all__ = [
     "pdf_service",
@@ -14,4 +15,5 @@ __all__ = [
     "scoring_service",
     "assessment_service",
     "skill_analysis_service",
+    "email_service",
 ]

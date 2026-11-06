@@ -127,6 +127,28 @@ export async function demoLogin() {
 }
 
 /**
+ * GET /auth/password-reset/status
+ */
+export async function getPasswordResetStatus() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/password-reset/status`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        enabled: false,
+        message: data.detail || 'Password reset is currently unavailable in this environment.',
+      };
+    }
+    return await response.json();
+  } catch {
+    return {
+      enabled: false,
+      message: 'Password reset service status could not be verified.',
+    };
+  }
+}
+
+/**
  * POST /auth/forgot-password
  */
 export async function forgotPassword(email) {

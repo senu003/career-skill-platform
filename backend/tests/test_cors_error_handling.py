@@ -29,17 +29,10 @@ def test_cors_untrusted_origin():
         }
     )
     # If the origin is not allowed, CORSMiddleware does not return it in the headers.
-    # It might return a 400 Bad Request for preflight, or just return 200 without headers.
     assert response.headers.get("access-control-allow-origin") != "http://untrusted.com"
 
 
 def test_global_exception_handler():
-    # Mocking a function in users router to raise a generic exception
-    with patch("app.routers.users.get_me", side_effect=Exception("Top secret traceback details")):
-        # Overriding dependency for current_user is tricky, let's mock the db session instead for an unauthenticated route
-        # Actually /cv/latest needs auth. We can mock a service function called in an unauthenticated way or just the router function.
-        pass
-
     # A better approach: we can just use the login endpoint and mock the db call
     with patch("sqlalchemy.orm.Query.first", side_effect=ValueError("Database secret leak")):
         response = client.post(
@@ -77,3 +70,50 @@ def test_intentional_http_exception_preserved():
     assert response.status_code == 404
     assert response.json() == {"detail": "Analysis session not found."}
     app.dependency_overrides.pop(get_current_user_required, None)
+
+
+def test_global_exception_handler_preserves_cors_headers():
+    with patch("sqlalchemy.orm.Query.first", side_effect=RuntimeError("Unexpected unhandled error")):
+        response = client.post(
+            "/login",
+            data={"username": "test@test.com", "password": "password"},
+            headers={"Origin": "http://localhost:5173"},
+        )
+        assert response.status_code == 500
+        assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        assert response.json() == {"detail": "Internal server error"}
+
+
+def test_google_auth_invalid_token_returns_401_with_cors():
+    response = client.post(
+        "/auth/google",
+        json={"credential": "invalid-dummy-credential"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert response.status_code == 401
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert "Invalid Google credentials" in response.json()["detail"]
+
+
+def test_google_auth_successful_login_and_user_creation():
+    mock_payload = {
+        "sub": "google-uid-99999",
+        "google_id": "google-uid-99999",
+        "email": "verified_google_candidate@example.com",
+        "name": "Verified Google Candidate",
+        "picture": "https://example.com/avatar.jpg",
+        "email_verified": True,
+    }
+    with patch("app.routers.auth.verify_google_token", return_value=mock_payload):
+        response = client.post(
+            "/auth/google",
+            json={"credential": "mocked-valid-google-jwt-token"},
+            headers={"Origin": "http://localhost:5173"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert data["user"]["email"] == "verified_google_candidate@example.com"
+        assert data["user"]["name"] == "Verified Google Candidate"
+        assert data["user"]["oauth_provider"] == "google"
+        assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"

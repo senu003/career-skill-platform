@@ -27,6 +27,7 @@ class User(Base):
 
     reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("SecurityAuditLog", back_populates="user", cascade="all, delete-orphan")
+    revoked_tokens = relationship("RevokedToken", back_populates="user", cascade="all, delete-orphan")
 
 
 class PasswordResetToken(Base):
@@ -56,6 +57,18 @@ class SecurityAuditLog(Base):
     created_at: Any = Column(DateTime, server_default=func.now())
 
     user = relationship("User", back_populates="audit_logs")
+
+class RevokedToken(Base):
+    """Stores revoked JWT token hashes for server-side logout / invalidation."""
+    __tablename__ = "revoked_tokens"
+
+    id: Any = Column(Integer, primary_key=True)
+    token_hash: Any = Column(String(64), unique=True, index=True, nullable=False)  # SHA-256 hex digest
+    user_id: Any = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    expires_at: Any = Column(DateTime, nullable=False, index=True)
+    created_at: Any = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="revoked_tokens")
 
 
 class CV(Base):

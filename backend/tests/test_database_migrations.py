@@ -61,6 +61,7 @@ class TestDatabaseMigrations(unittest.TestCase):
             "question_options",
             "assessment_attempts",
             "assessment_answers",
+            "revoked_tokens",
             "alembic_version",
         }
 
