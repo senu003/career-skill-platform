@@ -299,3 +299,25 @@ class AssessmentAnswer(Base):
         CheckConstraint("selected_answer IN ('A', 'B', 'C', 'D')", name="valid_selected_answer"),
         UniqueConstraint("attempt_id", "question_id", name="unique_attempt_question"),
     )
+
+
+class AnalysisRequest(Base):
+    """
+    Tracks CV analysis requests for idempotency, safe retries, and atomic transaction handling.
+    Scoped to authenticated users.
+    """
+    __tablename__ = "analysis_requests"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    idempotency_key = Column(String(128), nullable=False, index=True)
+    request_hash = Column(String(64), nullable=False)
+    status = Column(String(32), nullable=False, default="processing", server_default=text("'processing'"))
+    analysis_id = Column(Integer, ForeignKey("analyses.id", ondelete="SET NULL"), nullable=True)
+    response_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_analysis_requests_user_key"),
+    )

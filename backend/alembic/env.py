@@ -25,10 +25,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set sqlalchemy.url: preserve caller-provided test/sqlite URLs, otherwise use DATABASE_URL env var
+# Set sqlalchemy.url: preserve caller-provided test/sqlite/custom URLs, otherwise use DATABASE_URL env var
 configured_url = config.get_main_option("sqlalchemy.url")
 database_url = os.getenv("DATABASE_URL")
-if configured_url and ("sqlite" in configured_url or ":memory:" in configured_url):
+ini_default = "postgresql://postgres:postgres@localhost:5432/career_skill_db"
+if configured_url and configured_url != ini_default:
     pass
 elif database_url:
     config.set_main_option("sqlalchemy.url", database_url)

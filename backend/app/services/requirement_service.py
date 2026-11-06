@@ -34,6 +34,32 @@ def _get_ssl_verify():
 
 
 
+_validated_groq_models = set()
+
+def _validate_groq_model(groq_client, model_name: str):
+    if model_name in _validated_groq_models:
+        return
+    from fastapi import HTTPException as _HTTPException
+    try:
+        models = groq_client.models.list().data
+        valid_models = [m.id for m in models]
+        if model_name not in valid_models:
+            raise _HTTPException(
+                status_code=502,
+                detail=f"GROQ_MODEL '{model_name}' is not in Groq's available model list. "
+                       f"Available models: {valid_models}. Set a valid GROQ_MODEL in .env."
+            )
+        _validated_groq_models.add(model_name)
+    except _HTTPException:
+        raise
+    except Exception as e:
+        raise _HTTPException(
+            status_code=502,
+            detail=f"Unable to validate GROQ_MODEL '{model_name}' against Groq's model list: {e}. "
+                   f"Set a valid GROQ_MODEL in .env."
+        )
+
+
 def normalize_requirement_level(level: Optional[str]) -> str:
     """
     Sanitize extracted requirement levels.
@@ -118,7 +144,17 @@ Company requirements:
     cache_path = os.path.join(cache_dir, f"{cache_key}.json")
     
     if mock:
-        return {"requirements": []}
+        common_tech = ['Python', 'JavaScript', 'TypeScript', 'React', 'Docker', 'PostgreSQL', 'FastAPI', 'Node.js', 'AWS', 'SQL', 'Git']
+        found = []
+        for tech in common_tech:
+            if tech.lower() in text.lower():
+                found.append({'skill': tech, 'level': 'unspecified', 'importance': 'required'})
+        if not found:
+            found = [
+                {'skill': 'Python', 'level': 'intermediate', 'importance': 'required'},
+                {'skill': 'Docker', 'level': 'unspecified', 'importance': 'required'}
+            ]
+        return {'requirements': found}
         
     if not refresh and os.path.exists(cache_path):
         try:
@@ -137,31 +173,13 @@ Company requirements:
                 import openai
                 import httpx
                 transport = httpx.HTTPTransport(retries=3, verify=_get_ssl_verify())
-                http_client = httpx.Client(transport=transport, timeout=30.0)
+                http_client = httpx.Client(transport=transport, timeout=60.0)
                 groq_client = openai.OpenAI(
                     api_key=os.getenv("GROQ_API_KEY"),
                     base_url="https://api.groq.com/openai/v1",
                     http_client=http_client
                 )
-                from fastapi import HTTPException as _HTTPException
-                try:
-                    models = groq_client.models.list().data
-                    valid_models = [m.id for m in models]
-                    if model_name not in valid_models:
-                        raise _HTTPException(
-                            status_code=502,
-                            detail=f"GROQ_MODEL '{model_name}' is not in Groq's available model list. "
-                                   f"Available models: {valid_models}. Set a valid GROQ_MODEL in .env."
-                        )
-                except _HTTPException:
-                    raise
-                except Exception as e:
-                    raise _HTTPException(
-                        status_code=502,
-                        detail=f"Unable to validate GROQ_MODEL '{model_name}' against Groq's model list: {e}. "
-                               f"Set a valid GROQ_MODEL in .env."
-                    )
-                    
+                _validate_groq_model(groq_client, model_name)
                 response = groq_client.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
@@ -384,33 +402,14 @@ Return JSON with this exact structure:
                     import openai
                     import httpx
                     transport = httpx.HTTPTransport(retries=3, verify=_get_ssl_verify())
-                    http_client = httpx.Client(transport=transport, timeout=30.0)
+                    http_client = httpx.Client(transport=transport, timeout=60.0)
                     groq_client = openai.OpenAI(
                         api_key=os.getenv("GROQ_API_KEY"),
                         base_url="https://api.groq.com/openai/v1",
                         http_client=http_client
                     )
                     
-                    from fastapi import HTTPException as _HTTPException
-                    try:
-                        # Check models list to ensure validity
-                        models = groq_client.models.list().data
-                        valid_models = [m.id for m in models]
-                        if model_name not in valid_models:
-                            raise _HTTPException(
-                                status_code=502,
-                                detail=f"GROQ_MODEL '{model_name}' is not in Groq's available model list. "
-                                       f"Available models: {valid_models}. Set a valid GROQ_MODEL in .env."
-                            )
-                    except _HTTPException:
-                        raise
-                    except Exception as e:
-                        raise _HTTPException(
-                            status_code=502,
-                            detail=f"Unable to validate GROQ_MODEL '{model_name}' against Groq's model list: {e}. "
-                                   f"Set a valid GROQ_MODEL in .env."
-                        )
-                        
+                    _validate_groq_model(groq_client, model_name)
                     response = groq_client.chat.completions.create(
                         model=model_name,
                         messages=[{"role": "user", "content": prompt}],

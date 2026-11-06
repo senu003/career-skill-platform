@@ -8,13 +8,22 @@ from fastapi import APIRouter, UploadFile, File, Form, Query, HTTPException, Dep
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+import tempfile
 from app.database import get_db
+from app.services import cv_service
 from app.services.cv_service import (
     process_cv,
     extract_pdf_text,
     parse_and_validate_requirements,
     get_candidate_sessions,
     get_candidate_session_detail,
+    read_bounded_file,
+    get_max_upload_size_bytes,
+)
+from app.services.idempotency_service import (
+    compute_analysis_request_hash,
+    register_or_get_analysis_request,
+    mark_analysis_request_failed,
 )
 from app.services.requirement_service import extract_requirements, evaluate_cv_with_gemini
 from app.services.matching_service import match_skills_in_text
@@ -22,7 +31,7 @@ from app.services.scoring_service import calculate_skill_score
 from app.services.skill_analysis_service import combine_cv_and_assessment
 from app.schemas.cv import CVAnalyzeResponseSchema
 from app.auth_deps import get_current_user, get_current_user_required, User
-from app.models import CV, Job, Analysis
+from app.models import CV, Job, Analysis, AnalysisRequest
 from app.rate_limiter import limiter, RATE_LIMIT_CV_ANALYZE
 from app.services.storage_service import get_storage_backend
 
@@ -434,12 +443,14 @@ async def analyze_cv(
     user_id: Optional[int] = Form(None),
     user_id_query: Optional[int] = Query(None, alias="user_id"),
     include_prior_assessments: bool = Form(True),
+    idempotency_key: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     Analyzes an uploaded CV PDF (or saved CV via cv_id) against job skill requirements.
-    Persists CV, Job, and Analysis session records for logged in candidates.
+    Persists CV, Job, and Analysis session records for logged in candidates in an atomic transaction.
+    Protects against duplicate submissions and race conditions via user-scoped idempotency keys.
     Returns matched skills, missing skills, combined assessment results, level gaps, and scores.
     """
     if user_id is not None or user_id_query is not None:
@@ -448,51 +459,83 @@ async def analyze_cv(
         provided_user_id = user_id if user_id is not None else user_id_query
         if provided_user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to act on behalf of this user")
-            
+
     effective_user_id = current_user.id if current_user else None
+    user_exists = db.query(User).filter(User.id == effective_user_id).first() if effective_user_id else None
+
+    # Resolve idempotency key from form or headers
+    req_key = (
+        idempotency_key
+        or request.headers.get("idempotency-key")
+        or request.headers.get("x-idempotency-key")
+        or request.headers.get("x-request-id")
+    )
+    if req_key:
+        req_key = req_key.strip()
 
     # 1. Parse and validate requirements JSON payload
     parsed_requirements = parse_and_validate_requirements(requirements)
 
+    # 2. File boundary & early reading for request hashing
+    file_bytes: Optional[bytes] = None
+    if file and file.filename:
+        filename = file.filename or ""
+        is_pdf_mime = file.content_type in ["application/pdf", "application/x-pdf", "binary/octet-stream"]
+        is_pdf_ext = filename.lower().endswith(".pdf")
+        if not (is_pdf_mime or is_pdf_ext) or (not is_pdf_ext and file.content_type not in ["application/pdf", "application/x-pdf"]):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+
+        limit = get_max_upload_size_bytes()
+        file_bytes = await read_bounded_file(file, limit)
+        try:
+            await file.seek(0)
+        except Exception:
+            pass
+
+    # 3. Idempotency handling for authenticated users
+    idempotency_record = None
+    if user_exists and req_key:
+        req_hash = compute_analysis_request_hash(
+            requirements=requirements,
+            job_title=job_title,
+            company=company,
+            include_prior=include_prior_assessments,
+            file_bytes=file_bytes,
+            cv_id=cv_id,
+        )
+        idempotency_record, is_new = register_or_get_analysis_request(
+            db=db,
+            user_id=effective_user_id,
+            idempotency_key=req_key,
+            request_hash=req_hash,
+        )
+        if not is_new:
+            # Safe retry recovery: commit already succeeded previously!
+            if idempotency_record.response_json:
+                try:
+                    return json.loads(idempotency_record.response_json)
+                except Exception:
+                    pass
+            if idempotency_record.analysis_id:
+                try:
+                    return get_analysis_session_detail(
+                        analysis_id=idempotency_record.analysis_id,
+                        db=db,
+                        current_user=current_user
+                    )
+                except Exception:
+                    pass
+
+    # 4. Extract CV text: either from uploaded file OR from saved CV record
+    is_new_file = False
+    created_file_path: Optional[str] = None
     cv_data = None
     cv_record = None
 
-    user_exists = db.query(User).filter(User.id == effective_user_id).first() if effective_user_id else None
-
-    # 2. Extract CV text: either from uploaded file OR from saved CV record
     if file and file.filename:
+        is_new_file = True
         cv_data = await process_cv(file, user_id=effective_user_id)
-        if user_exists:
-            cv_record = CV(
-                user_id=effective_user_id,
-                file_name=cv_data.get("filename", "Uploaded_Resume.pdf"),
-                file_path=cv_data.get("file_path", "")
-            )
-            db.add(cv_record)
-            try:
-                db.commit()
-                db.refresh(cv_record)
-            except Exception:
-                db.rollback()
-                if cv_data.get("file_path"):
-                    storage = get_storage_backend()
-                    storage.delete_file(cv_data["file_path"])
-                    if os.path.exists(cv_data["file_path"]):
-                        try:
-                            os.remove(cv_data["file_path"])
-                        except OSError:
-                            pass
-                raise HTTPException(status_code=500, detail="Failed to save CV record")
-        else:
-            # Clean up temporary uploaded file for unauthenticated users
-            if cv_data.get("file_path"):
-                storage = get_storage_backend()
-                storage.delete_file(cv_data["file_path"])
-                if os.path.exists(cv_data["file_path"]):
-                    try:
-                        os.remove(cv_data["file_path"])
-                    except OSError:
-                        pass
+        created_file_path = cv_data.get("file_path")
     else:
         # Search for saved CV by cv_id or latest for effective_user_id
         if cv_id:
@@ -521,69 +564,134 @@ async def analyze_cv(
                 detail="No CV file uploaded and no saved candidate CV found. Please upload a PDF resume."
             )
 
-    cv_text = str(cv_data.get("text", "")) if cv_data else ""
+    # 5. Slow AI provider calls KEPT OUTSIDE the write transaction
+    try:
+        cv_text = str(cv_data.get("text", "")) if cv_data else ""
+        evaluated_skills = evaluate_cv_with_gemini(cv_text, parsed_requirements)
+        matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
+        missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
+        score_data = calculate_skill_score(matched_skills, missing_skills)
+    except Exception as provider_err:
+        logger.error(f"Provider evaluation failed: {provider_err}")
+        if is_new_file and created_file_path:
+            storage = get_storage_backend()
+            storage.delete_file(created_file_path)
+            if os.path.exists(created_file_path):
+                try:
+                    os.remove(created_file_path)
+                except OSError:
+                    pass
+        if idempotency_record:
+            mark_analysis_request_failed(idempotency_record.id)
+        if isinstance(provider_err, HTTPException):
+            raise provider_err
+        raise HTTPException(status_code=502, detail=f"AI provider evaluation failed: {provider_err}")
 
-    # 3. Evaluate candidate CV against requirements using Gemini
-    evaluated_skills = evaluate_cv_with_gemini(cv_text, parsed_requirements)
-    matched_skills = [s for s in evaluated_skills if s.get("cv_match_status") == "Match"]
-    missing_skills = [s for s in evaluated_skills if s.get("cv_match_status") != "Match"]
+    # 6. ATOMIC WRITE TRANSACTION for CV, Job, Analysis, and Idempotency
+    idempotency_id = idempotency_record.id if idempotency_record else None
+    try:
+        analysis_record: Optional[Analysis] = None
+        analysis_id_val: Optional[int] = None
 
-    # 4. Calculate skill score breakdown
-    score_data = calculate_skill_score(matched_skills, missing_skills)
+        if user_exists:
+            if is_new_file:
+                cv_record = CV(
+                    user_id=effective_user_id,
+                    file_name=cv_data.get("filename", "Uploaded_Resume.pdf"),
+                    file_path=cv_data.get("file_path", "")
+                )
+                db.add(cv_record)
+                db.flush()
 
-    # 5. Save Job & Analysis session records for logged-in user
-    analysis_record: Optional[Analysis] = None
-    if user_exists:
-        title_str = job_title or "Job Position"
-        company_str = company or "Target Company"
-        job_record = Job(
-            user_id=effective_user_id,
-            title=title_str,
-            company=company_str,
-            description=requirements
-        )
-        db.add(job_record)
-        db.commit()
-        db.refresh(job_record)
+            if cv_record is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Unable to associate the analysis with a saved CV record.",
+                )
 
-        if cv_record is None:
-            raise HTTPException(
-                status_code=500,
-                detail="Unable to associate the analysis with a saved CV record.",
+            title_str = job_title or "Job Position"
+            company_str = company or "Target Company"
+            job_record = Job(
+                user_id=effective_user_id,
+                title=title_str,
+                company=company_str,
+                description=requirements
             )
+            db.add(job_record)
+            db.flush()
 
-        overall_val = score_data.get("score", 0) if score_data else 0
-        analysis_record = Analysis(
+            overall_val = score_data.get("score", 0) if score_data else 0
+            analysis_record = Analysis(
+                user_id=effective_user_id,
+                job_id=job_record.id,
+                cv_id=cv_record.id,
+                overall_score=overall_val,
+                raw_analysis_data=json.dumps(evaluated_skills)
+            )
+            db.add(analysis_record)
+            db.flush()
+            analysis_id_val = analysis_record.id
+
+        cv_matching_result = {
+            "filename": cv_data.get("filename"),
+            "pages": cv_data.get("pages"),
+            "skills": evaluated_skills,
+            "matched_skills": matched_skills,
+            "missing_skills": missing_skills,
+            "score_data": score_data
+        }
+
+        result = combine_cv_and_assessment(
+            cv_matching_result,
+            db_or_assessments=db,
             user_id=effective_user_id,
-            job_id=job_record.id,
-            cv_id=cv_record.id if cv_record else None,
-            overall_score=overall_val,
-            raw_analysis_data=json.dumps(evaluated_skills)
+            analysis_id=analysis_id_val,
+            include_prior=include_prior_assessments,
         )
-        db.add(analysis_record)
-        db.commit()
-        db.refresh(analysis_record)
+        if analysis_id_val is not None:
+            result["analysis_id"] = analysis_id_val
 
-    # 6. Build raw matching result
-    cv_matching_result = {
-        "filename": cv_data.get("filename"),
-        "pages": cv_data.get("pages"),
-        "skills": evaluated_skills,
-        "matched_skills": matched_skills,
-        "missing_skills": missing_skills,
-        "score_data": score_data
-    }
+        if user_exists and idempotency_record is not None:
+            idem = db.query(AnalysisRequest).filter(AnalysisRequest.id == idempotency_record.id).first()
+            if idem:
+                idem.status = "completed"
+                idem.analysis_id = analysis_id_val
+                idem.response_json = json.dumps(result)
+                idem.updated_at = func.now()
+                db.add(idem)
 
-    analysis_id_val = int(str(getattr(analysis_record, "id"))) if (analysis_record is not None and getattr(analysis_record, "id", None) is not None) else None
+        # Commit all records atomically in ONE database transaction
+        if user_exists:
+            db.commit()
+            db.refresh(analysis_record)
+            db.refresh(job_record)
+            if is_new_file and cv_record is not None:
+                db.refresh(cv_record)
+        else:
+            if is_new_file and created_file_path:
+                storage = get_storage_backend()
+                storage.delete_file(created_file_path)
+                if os.path.exists(created_file_path):
+                    try:
+                        os.remove(created_file_path)
+                    except OSError:
+                        pass
 
-    # 7. Combine CV matching with completed assessment results
-    result = combine_cv_and_assessment(
-        cv_matching_result,
-        db_or_assessments=db,
-        user_id=effective_user_id,
-        analysis_id=analysis_id_val,
-        include_prior=include_prior_assessments,
-    )
-    if analysis_id_val is not None:
-        result["analysis_id"] = analysis_id_val
-    return result
+        return result
+
+    except Exception as ex:
+        if user_exists:
+            db.rollback()
+        if is_new_file and created_file_path:
+            storage = get_storage_backend()
+            storage.delete_file(created_file_path)
+            if os.path.exists(created_file_path):
+                try:
+                    os.remove(created_file_path)
+                except OSError:
+                    pass
+        if idempotency_id:
+            mark_analysis_request_failed(idempotency_id)
+        if isinstance(ex, HTTPException):
+            raise ex
+        raise HTTPException(status_code=500, detail=f"Database write transaction failed: {ex}")
