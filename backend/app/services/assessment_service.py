@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 
 from app.models import AssessmentQuestion, QuestionOption, AssessmentAttempt, AssessmentAnswer
@@ -267,6 +268,62 @@ def start_assessment(
     }
 
 
+def _build_existing_answer_response(
+    db: Session,
+    attempt: AssessmentAttempt,
+    question: AssessmentQuestion,
+    existing_answer: AssessmentAnswer
+) -> Dict[str, Any]:
+    active_level, last_passed, is_done, level_stats = evaluate_attempt_state(db, attempt)
+    q_lvl = question.level.lower()
+    stats = level_stats.get(q_lvl, {})
+    q_level_answered = stats.get("answered", 0)
+    q_level_total = stats.get("total", 5)
+    correct_count = stats.get("correct", 0)
+
+    level_completed = False
+    level_passed = None
+    next_questions = None
+    attempt_completed = False
+    assessed_level = None
+
+    if q_level_answered >= q_level_total:
+        lvl_answers = (
+            db.query(AssessmentAnswer)
+            .join(AssessmentQuestion, AssessmentAnswer.question_id == AssessmentQuestion.id)
+            .filter(
+                AssessmentAnswer.attempt_id == attempt.id,
+                func.lower(AssessmentQuestion.level) == q_lvl
+            )
+            .order_by(AssessmentAnswer.id.asc())
+            .all()
+        )
+        if lvl_answers and lvl_answers[-1].question_id == question.id:
+            level_completed = True
+            level_passed = (correct_count >= 4)
+            allowed_levels = get_allowed_levels(attempt.required_level)
+            lvl_idx = allowed_levels.index(q_lvl) if q_lvl in allowed_levels else -1
+
+            if level_passed and (lvl_idx >= 0 and lvl_idx + 1 < len(allowed_levels)):
+                next_lvl = allowed_levels[lvl_idx + 1]
+                next_questions = fetch_questions_for_level(db, attempt.skill, next_lvl, user_id=attempt.user_id)
+            else:
+                attempt_completed = True
+                assessed_level = attempt.assessed_level
+
+    return {
+        "attempt_id": attempt.id,
+        "question_id": question.id,
+        "selected_answer": existing_answer.selected_answer,
+        "is_correct": existing_answer.is_correct,
+        "level_completed": level_completed,
+        "level_passed": level_passed,
+        "attempt_completed": attempt_completed,
+        "assessed_level": assessed_level,
+        "next_questions": next_questions
+    }
+
+
 def submit_answer(
     db: Session,
     attempt_id: int,
@@ -280,12 +337,6 @@ def submit_answer(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Assessment attempt {attempt_id} not found."
-        )
-
-    if attempt.completed_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Assessment attempt is already completed."
         )
 
     # 2. Fetch question
@@ -304,7 +355,7 @@ def submit_answer(
             detail=f"Invalid selected_answer '{selected_answer}'. Must be A, B, C, or D."
         )
 
-    # 4. Check duplicate answer
+    # 4. Check for existing answer (idempotency & retry check before completed_at check)
     existing_answer = (
         db.query(AssessmentAnswer)
         .filter(
@@ -314,12 +365,23 @@ def submit_answer(
         .first()
     )
     if existing_answer:
+        # Identical retry: return existing response safely without changing anything
+        if existing_answer.selected_answer.upper().strip() == sel_ans:
+            return _build_existing_answer_response(db, attempt, question, existing_answer)
+        # Conflicting duplicate: reject without altering saved state
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Duplicate answer: question {question_id} has already been answered in attempt {attempt_id}."
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Duplicate answer conflict: question {question_id} has already been answered with '{existing_answer.selected_answer}'. Conflicting answer '{sel_ans}' is rejected."
         )
 
-    # 5. Determine active level before adding answer
+    # 5. If this is a new question being answered, verify attempt is not already completed
+    if attempt.completed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assessment attempt is already completed."
+        )
+
+    # 6. Determine active level before adding answer
     current_active_level, last_passed, is_done, _ = evaluate_attempt_state(db, attempt)
     if is_done or not current_active_level:
         raise HTTPException(
@@ -339,7 +401,7 @@ def submit_answer(
             detail=f"Question {question_id} is for level '{question.level}', but current active level is '{current_active_level}'."
         )
 
-    # 6. Save answer with optional time_taken
+    # 7. Save answer with optional time_taken
     is_correct = (sel_ans == question.correct_answer.upper())
     answer_record = AssessmentAnswer(
         attempt_id=attempt_id,
@@ -350,9 +412,50 @@ def submit_answer(
         answered_at=datetime.now(timezone.utc)
     )
     db.add(answer_record)
-    db.commit()
 
-    # 7. Re-evaluate attempt state
+    # Flush to enforce DB uniqueness constraint across concurrent workers
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        # Refresh attempt after rollback
+        attempt = db.query(AssessmentAttempt).filter(AssessmentAttempt.id == attempt_id).first()
+        # Query committed answer from winning concurrent worker
+        existing = (
+            db.query(AssessmentAnswer)
+            .filter(
+                AssessmentAnswer.attempt_id == attempt_id,
+                AssessmentAnswer.question_id == question_id
+            )
+            .first()
+        )
+        if not existing:
+            import time
+            for _ in range(10):
+                time.sleep(0.05)
+                db.rollback()
+                existing = (
+                    db.query(AssessmentAnswer)
+                    .filter(
+                        AssessmentAnswer.attempt_id == attempt_id,
+                        AssessmentAnswer.question_id == question_id
+                    )
+                    .first()
+                )
+                if existing:
+                    break
+
+        if existing and attempt:
+            if existing.selected_answer.upper().strip() == sel_ans:
+                return _build_existing_answer_response(db, attempt, question, existing)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Duplicate answer conflict: question {question_id} has already been answered with '{existing.selected_answer}'. Conflicting answer '{sel_ans}' is rejected."
+                )
+        raise
+
+    # 8. Re-evaluate attempt state
     new_active_level, new_last_passed, new_is_done, level_stats = evaluate_attempt_state(db, attempt)
 
     level_completed = (new_active_level != current_active_level)
@@ -371,8 +474,6 @@ def submit_answer(
                 eval_lvl = generate_ml_prediction(matched=True, required_level=attempt.required_level, importance="required", scores=scores)
             attempt.assessed_level = eval_lvl
             attempt.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            db.refresh(attempt)
         else:
             lvl_to_fetch = new_active_level or "basic"
             next_questions = fetch_questions_for_level(db, attempt.skill, lvl_to_fetch, user_id=attempt.user_id)
@@ -384,8 +485,14 @@ def submit_answer(
             eval_lvl = generate_ml_prediction(matched=True, required_level=attempt.required_level, importance="required", scores=scores)
         attempt.assessed_level = eval_lvl
         attempt.completed_at = datetime.now(timezone.utc)
+
+    # 9. Atomic commit of both answer and attempt state
+    try:
         db.commit()
         db.refresh(attempt)
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "attempt_id": attempt.id,
