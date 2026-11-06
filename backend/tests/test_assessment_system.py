@@ -228,7 +228,7 @@ class TestAssessmentSystem(unittest.TestCase):
         check_no_correct_answer(get_res)
 
     def test_11_duplicate_answers_rejected(self):
-        """11. Verify duplicate answers for the same question are rejected."""
+        """11. Verify duplicate answers: safe identical retry returns 200, conflicting duplicate is rejected."""
         start_res = self.client.post("/assessment/start", json={
             "skill": "JavaScript",
             "required_level": "basic",
@@ -245,14 +245,24 @@ class TestAssessmentSystem(unittest.TestCase):
         })
         self.assertEqual(r1.status_code, 200)
 
-        # Second submission -> duplicate!
+        # Identical retry -> safe 200 recovery!
         r2 = self.client.post("/assessment/answer", json={
             "attempt_id": attempt_id,
             "question_id": q1_id,
             "selected_answer": "A"
         })
-        self.assertEqual(r2.status_code, 400)
-        self.assertIn("Duplicate answer", r2.json()["detail"])
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["selected_answer"], "A")
+        self.assertEqual(r2.json()["is_correct"], r1.json()["is_correct"])
+
+        # Conflicting duplicate submission -> rejected with 409 Conflict!
+        r3 = self.client.post("/assessment/answer", json={
+            "attempt_id": attempt_id,
+            "question_id": q1_id,
+            "selected_answer": "B"
+        })
+        self.assertEqual(r3.status_code, 409)
+        self.assertIn("Duplicate answer", r3.json()["detail"])
 
     def test_12_invalid_question_ids_handled(self):
         """12. Verify invalid question IDs are handled."""
