@@ -22,7 +22,19 @@ from app.services.storage_service import get_storage_backend
 
 client = TestClient(app)
 
-POSTGRES_BASE_URL = os.getenv("PG_TEST_BASE_URL", "postgresql://postgres:S3045277k$@localhost:5432/postgres")
+from urllib.parse import urlparse, urlunparse
+
+def get_postgres_urls(disp_db_name: str):
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env")))
+        db_url = os.getenv("DATABASE_URL", "postgresql://postgres:S3045277k$@localhost:5432/career_skill_db")
+    
+    parsed = urlparse(db_url)
+    admin_url = os.getenv("PG_TEST_BASE_URL", db_url)
+    disp_url = urlunparse((parsed.scheme, parsed.netloc, f"/{disp_db_name}", "", "", ""))
+    return admin_url, disp_url
 
 
 def get_auth_token_for_user(email: str, password: str = "Secret123!"):
@@ -65,14 +77,18 @@ class TestPhase3AReliability(unittest.TestCase):
         and that downgrade/re-upgrade operate idempotently without data loss.
         """
         disp_db_name = f"phase3a_mig_{uuid.uuid4().hex[:8]}"
-        admin_conn = psycopg2.connect(POSTGRES_BASE_URL)
+        admin_url, disp_url = get_postgres_urls(disp_db_name)
+
+        try:
+            admin_conn = psycopg2.connect(admin_url)
+        except Exception as e:
+            self.skipTest(f"PostgreSQL connection to {admin_url} not available: {e}")
+
         admin_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         admin_cur = admin_conn.cursor()
         admin_cur.execute(f"DROP DATABASE IF EXISTS {disp_db_name};")
         admin_cur.execute(f"CREATE DATABASE {disp_db_name};")
         admin_conn.close()
-
-        disp_url = f"postgresql://postgres:S3045277k$@localhost:5432/{disp_db_name}"
         backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         ini_path = os.path.join(backend_dir, "alembic.ini")
         script_dir = os.path.join(backend_dir, "alembic")
@@ -112,17 +128,20 @@ class TestPhase3AReliability(unittest.TestCase):
 
             engine.dispose()
         finally:
-            admin_conn = psycopg2.connect(POSTGRES_BASE_URL)
-            admin_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            admin_cur = admin_conn.cursor()
-            admin_cur.execute(f"""
-                SELECT pg_terminate_backend(pg_stat_activity.pid)
-                FROM pg_stat_activity
-                WHERE pg_stat_activity.datname = '{disp_db_name}'
-                  AND pid <> pg_backend_pid();
-            """)
-            admin_cur.execute(f"DROP DATABASE IF EXISTS {disp_db_name};")
-            admin_conn.close()
+            try:
+                admin_conn = psycopg2.connect(admin_url)
+                admin_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+                admin_cur = admin_conn.cursor()
+                admin_cur.execute(f"""
+                    SELECT pg_terminate_backend(pg_stat_activity.pid)
+                    FROM pg_stat_activity
+                    WHERE pg_stat_activity.datname = '{disp_db_name}'
+                      AND pid <> pg_backend_pid();
+                """)
+                admin_cur.execute(f"DROP DATABASE IF EXISTS {disp_db_name};")
+                admin_conn.close()
+            except Exception:
+                pass
 
     @patch("app.services.cv_service.extract_pdf_text")
     @patch("app.routers.cv.evaluate_cv_with_gemini")
