@@ -14,6 +14,7 @@ from app.services import cv_service
 from app.services.cv_service import (
     process_cv,
     extract_pdf_text,
+    extract_text_from_storage,
     parse_and_validate_requirements,
     get_candidate_sessions,
     get_candidate_session_detail,
@@ -119,9 +120,11 @@ def set_default_cv(
     """
     Sets a CV as the default/active CV by updating its uploaded_at timestamp.
     """
-    cv = db.query(CV).filter(CV.id == cv_id, CV.user_id == current_user.id).first()
+    cv = db.query(CV).filter(CV.id == cv_id).first()
     if not cv:
         raise HTTPException(status_code=404, detail="CV not found")
+    if cv.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this CV")
 
     cv.uploaded_at = datetime.now(timezone.utc)
     db.commit()
@@ -136,10 +139,13 @@ def download_cv(
 ):
     """
     Downloads or previews an uploaded CV file.
+    Enforces strict ownership check (403 for unauthorized cross-user access, 404 if not found).
     """
-    cv = db.query(CV).filter(CV.id == cv_id, CV.user_id == current_user.id).first()
+    cv = db.query(CV).filter(CV.id == cv_id).first()
     if not cv:
         raise HTTPException(status_code=404, detail="CV not found")
+    if cv.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this CV")
 
     file_bytes = None
     try:
@@ -163,6 +169,49 @@ def download_cv(
     )
 
 
+@router.get("/cv/{cv_id}/signed-url")
+def get_cv_signed_url(
+    cv_id: int,
+    expires_in: int = Query(300, ge=60, le=3600, description="URL validity lifetime in seconds"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Issues a short-lived signed download URL for private object storage.
+    Strictly verifies CV ownership before generating the signed URL.
+    Returns download_url (presigned S3 URL or authenticated proxy path for local storage).
+    """
+    cv = db.query(CV).filter(CV.id == cv_id).first()
+    if not cv:
+        raise HTTPException(status_code=404, detail="CV not found")
+    if cv.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this CV")
+
+    storage = get_storage_backend()
+    presigned_url = storage.generate_presigned_url(
+        cv.file_path,
+        expires_in=expires_in,
+        filename=cv.file_name
+    )
+
+    if presigned_url:
+        return {
+            "cv_id": cv_id,
+            "download_url": presigned_url,
+            "expires_in": expires_in,
+            "is_presigned": True,
+            "filename": cv.file_name
+        }
+    else:
+        return {
+            "cv_id": cv_id,
+            "download_url": f"/api/cv/{cv_id}/download",
+            "expires_in": expires_in,
+            "is_presigned": False,
+            "filename": cv.file_name
+        }
+
+
 @router.delete("/cv/{cv_id}")
 def delete_cv(
     cv_id: int,
@@ -172,9 +221,11 @@ def delete_cv(
     """
     Deletes an uploaded CV file if not linked to existing analyses.
     """
-    cv = db.query(CV).filter(CV.id == cv_id, CV.user_id == current_user.id).first()
+    cv = db.query(CV).filter(CV.id == cv_id).first()
     if not cv:
         raise HTTPException(status_code=404, detail="CV not found")
+    if cv.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this CV")
 
     linked_analyses = db.query(Analysis).filter(Analysis.cv_id == cv_id).count()
     if linked_analyses > 0:
@@ -209,9 +260,12 @@ def get_past_analysis_sessions(
     latest_cv = db.query(CV).filter(CV.user_id == current_user.id).order_by(CV.uploaded_at.desc()).first()
     cv_text = ""
     latest_path = getattr(latest_cv, "file_path", None) if latest_cv else None
-    if latest_path and os.path.exists(str(latest_path)):
+    if latest_path:
         try:
-            pdf_data = extract_pdf_text(str(latest_path))
+            if os.path.exists(str(latest_path)):
+                pdf_data = extract_pdf_text(str(latest_path))
+            else:
+                pdf_data = extract_text_from_storage(str(latest_path))
             cv_text = pdf_data.get("text", "")
         except Exception:
             pass
@@ -332,9 +386,15 @@ def get_analysis_session_detail(
 
     cv_text = ""
     cv_path = getattr(cv_record, "file_path", None) if cv_record else None
-    if cv_path and os.path.exists(str(cv_path)):
-        pdf_data = extract_pdf_text(str(cv_path))
-        cv_text = pdf_data.get("text", "")
+    if cv_path:
+        try:
+            if os.path.exists(str(cv_path)):
+                pdf_data = extract_pdf_text(str(cv_path))
+            else:
+                pdf_data = extract_text_from_storage(str(cv_path))
+            cv_text = pdf_data.get("text", "")
+        except Exception:
+            pass
 
     raw_data = getattr(analysis_record, "raw_analysis_data", None)
     if raw_data and not force_reanalyze:
@@ -550,14 +610,24 @@ async def analyze_cv(
             cv_record = db.query(CV).filter(CV.user_id == effective_user_id).order_by(CV.uploaded_at.desc()).first()
 
         cv_path_val = getattr(cv_record, "file_path", None) if cv_record else None
-        if cv_path_val and os.path.exists(str(cv_path_val)):
-            pdf_data = extract_pdf_text(str(cv_path_val))
-            cv_data = {
-                "filename": str(getattr(cv_record, "file_name", "Resume.pdf")),
-                "file_path": str(cv_path_val),
-                "pages": pdf_data["pages"],
-                "text": pdf_data["text"]
-            }
+        if cv_path_val:
+            try:
+                if os.path.exists(str(cv_path_val)):
+                    pdf_data = extract_pdf_text(str(cv_path_val))
+                else:
+                    pdf_data = extract_text_from_storage(str(cv_path_val))
+                cv_data = {
+                    "filename": str(getattr(cv_record, "file_name", "Resume.pdf")),
+                    "file_path": str(cv_path_val),
+                    "pages": pdf_data["pages"],
+                    "text": pdf_data["text"]
+                }
+            except Exception as e:
+                logger.warning(f"Failed to extract text from saved CV {cv_path_val}: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Unable to read the saved candidate CV file. Please upload a new PDF resume."
+                )
         else:
             raise HTTPException(
                 status_code=400,

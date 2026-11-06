@@ -33,6 +33,19 @@ class StorageBackend(ABC):
         """Checks if file exists in storage."""
         pass
 
+    @abstractmethod
+    def generate_presigned_url(
+        self,
+        storage_path_or_key: str,
+        expires_in: int = 300,
+        filename: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Generates a short-lived signed download URL for private object storage.
+        Returns None if backend does not support signed URLs (e.g. local disk).
+        """
+        pass
+
 
 class LocalStorageBackend(StorageBackend):
     """
@@ -106,11 +119,23 @@ class LocalStorageBackend(StorageBackend):
         safe_path = self._resolve_safe_path(storage_path_or_key)
         return os.path.exists(safe_path)
 
+    def generate_presigned_url(
+        self,
+        storage_path_or_key: str,
+        expires_in: int = 300,
+        filename: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Local filesystem storage does not generate presigned URLs;
+        files are served directly via authenticated streaming endpoints.
+        """
+        return None
+
 
 class S3StorageBackend(StorageBackend):
     """
     Private S3 / S3-compatible (MinIO, Cloud Storage) object storage backend.
-    Enforces private object ACLs and strict isolation.
+    Enforces private object ACLs, server-side encryption, and strict isolation.
     """
 
     def __init__(
@@ -132,42 +157,68 @@ class S3StorageBackend(StorageBackend):
         if self._client is None:
             try:
                 import boto3
-                self._client = boto3.client(
-                    "s3",
-                    endpoint_url=self.endpoint_url,
-                    region_name=self.region_name,
-                    aws_access_key_id=self.aws_access_key_id,
-                    aws_secret_access_key=self.aws_secret_access_key,
-                )
+                client_kwargs = {
+                    "service_name": "s3",
+                    "region_name": self.region_name,
+                }
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                if self.aws_access_key_id and self.aws_secret_access_key:
+                    client_kwargs["aws_access_key_id"] = self.aws_access_key_id
+                    client_kwargs["aws_secret_access_key"] = self.aws_secret_access_key
+
+                self._client = boto3.client(**client_kwargs)
             except ImportError:
                 raise RuntimeError("boto3 is required for S3StorageBackend. Install boto3 or set STORAGE_BACKEND=local.")
         return self._client
+
+    def _extract_key(self, storage_path_or_key: str) -> str:
+        """
+        Normalizes full s3://bucket/key URIs or relative keys to object key.
+        """
+        key = (storage_path_or_key or "").strip()
+        if key.startswith("s3://"):
+            parts = key[5:].split("/", 1)
+            key = parts[1] if len(parts) > 1 else ""
+        return key.lstrip("/")
 
     def save_file(self, content: bytes, original_filename: str, user_id: Optional[int] = None) -> Tuple[str, str]:
         file_id = str(uuid.uuid4())
         safe_key = f"cvs/{user_id or 'anon'}/{file_id}.pdf"
         client = self._get_client()
-        client.put_object(
-            Bucket=self.bucket_name,
-            Key=safe_key,
-            Body=content,
-            ContentType="application/pdf",
-            ServerSideEncryption="AES256",
-        )
+
+        put_kwargs = {
+            "Bucket": self.bucket_name,
+            "Key": safe_key,
+            "Body": content,
+            "ContentType": "application/pdf",
+            "ServerSideEncryption": "AES256",
+        }
+        try:
+            # Enforce private ACL if bucket supports ACLs
+            client.put_object(**put_kwargs, ACL="private")
+        except Exception:
+            # Fallback for buckets with Object Ownership: Bucket Owner Enforced (ACLs disabled)
+            client.put_object(**put_kwargs)
+
         # Store safe S3 URI as access_path
         access_path = f"s3://{self.bucket_name}/{safe_key}"
         return safe_key, access_path
 
     def get_file_bytes(self, storage_path_or_key: str) -> bytes:
         client = self._get_client()
-        key = storage_path_or_key.replace(f"s3://{self.bucket_name}/", "").lstrip("/")
-        resp = client.get_object(Bucket=self.bucket_name, Key=key)
-        return resp["Body"].read()
+        key = self._extract_key(storage_path_or_key)
+        try:
+            resp = client.get_object(Bucket=self.bucket_name, Key=key)
+            return resp["Body"].read()
+        except Exception as e:
+            logger.warning(f"S3 get_object failed for {storage_path_or_key}: {e}")
+            raise FileNotFoundError(f"CV file not found in S3: {storage_path_or_key}") from e
 
     def delete_file(self, storage_path_or_key: str) -> bool:
         try:
             client = self._get_client()
-            key = storage_path_or_key.replace(f"s3://{self.bucket_name}/", "").lstrip("/")
+            key = self._extract_key(storage_path_or_key)
             client.delete_object(Bucket=self.bucket_name, Key=key)
             return True
         except Exception as e:
@@ -177,11 +228,37 @@ class S3StorageBackend(StorageBackend):
     def file_exists(self, storage_path_or_key: str) -> bool:
         try:
             client = self._get_client()
-            key = storage_path_or_key.replace(f"s3://{self.bucket_name}/", "").lstrip("/")
+            key = self._extract_key(storage_path_or_key)
             client.head_object(Bucket=self.bucket_name, Key=key)
             return True
         except Exception:
             return False
+
+    def generate_presigned_url(
+        self,
+        storage_path_or_key: str,
+        expires_in: int = 300,
+        filename: Optional[str] = None
+    ) -> Optional[str]:
+        client = self._get_client()
+        key = self._extract_key(storage_path_or_key)
+        params = {
+            "Bucket": self.bucket_name,
+            "Key": key,
+        }
+        if filename:
+            safe_filename = os.path.basename(filename)
+            params["ResponseContentDisposition"] = f'inline; filename="{safe_filename}"'
+            params["ResponseContentType"] = "application/pdf"
+        try:
+            return client.generate_presigned_url(
+                "get_object",
+                Params=params,
+                ExpiresIn=expires_in
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate S3 presigned URL for {storage_path_or_key}: {e}")
+            return None
 
 
 _STORAGE_INSTANCE: Optional[StorageBackend] = None
@@ -222,3 +299,9 @@ class _StorageServiceProxy:
 
 default_storage = _StorageServiceProxy()
 StorageService = LocalStorageBackend
+
+
+def is_s3_path(path: Optional[str]) -> bool:
+    """Returns True if path points to an S3 URI."""
+    return bool(path and str(path).strip().startswith("s3://"))
+

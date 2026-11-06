@@ -69,6 +69,46 @@ async def read_bounded_file(file: UploadFile, max_bytes: int) -> bytes:
     return bytes(content)
 
 
+def extract_text_from_storage(storage_path_or_key: str) -> dict:
+    """
+    Extracts text from a CV stored either on the local filesystem or in private object storage (S3).
+    Handles temporary scratch file extraction safely for non-local backends with guaranteed cleanup.
+    """
+    if not storage_path_or_key:
+        raise HTTPException(status_code=400, detail="Storage path cannot be empty.")
+
+    # 1. Direct local file check
+    if os.path.exists(storage_path_or_key):
+        return extract_pdf_text(storage_path_or_key)
+
+    # 2. Storage backend retrieval (S3 or local relative)
+    storage = get_storage_backend()
+    try:
+        content = storage.get_file_bytes(storage_path_or_key)
+    except Exception as e:
+        logger.warning(f"Failed to retrieve file from storage {storage_path_or_key}: {e}")
+        # Backward-compatible fallback for relative local path
+        if hasattr(storage, "_resolve_safe_path"):
+            safe_p = storage._resolve_safe_path(storage_path_or_key)
+            if os.path.exists(safe_p):
+                return extract_pdf_text(safe_p)
+        raise HTTPException(status_code=404, detail="CV file could not be retrieved from storage.")
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        return extract_pdf_text(tmp_path)
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
 async def process_cv(
     file: UploadFile,
     user_id: Optional[int] = None,
@@ -116,24 +156,8 @@ async def process_cv(
     storage = get_storage_backend()
     storage_key, file_path = storage.save_file(content, filename, user_id=user_id)
 
-    # Extract text from PDF
-    # If storage path exists locally, extract directly; otherwise retrieve bytes
-    if os.path.exists(file_path):
-        pdf_data = extract_pdf_text(file_path)
-    else:
-        # For non-local storage (e.g. S3), write to temporary local scratch file for parsing
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        try:
-            pdf_data = extract_pdf_text(tmp_path)
-        finally:
-            if os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+    # Extract text from PDF via unified storage helper
+    pdf_data = extract_text_from_storage(file_path)
 
     return {
         "filename": file.filename,
