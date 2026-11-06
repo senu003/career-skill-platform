@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [jobTitle, setJobTitle] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [jobDescription, setJobDescription] = useState('');
+  const [submissionKey, setSubmissionKey] = useState(null);
 
   // Saved CV State
   const [savedCv, setSavedCv] = useState(null);
@@ -169,10 +170,12 @@ export default function DashboardPage() {
 
     setSelectedFile(file);
     setUseSavedCv(false);
+    setSubmissionKey(null);
   };
 
   const removeFile = () => {
     setSelectedFile(null);
+    setSubmissionKey(null);
     if (savedCv) {
       setUseSavedCv(true);
     }
@@ -194,6 +197,9 @@ export default function DashboardPage() {
     }
 
     setLoading(true);
+    // Reuse existing submission key for retrying the same submission, or generate a fresh key
+    const activeKey = submissionKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+    setSubmissionKey(activeKey);
 
     try {
       // 1. Extract requirements from job description using POST /requirements/analyze
@@ -211,7 +217,7 @@ export default function DashboardPage() {
         throw new Error('No skill requirements could be extracted from the job description. Please provide a more detailed description.');
       }
 
-      // 2. Prepare multipart form data for POST /cv/analyze
+      // 2. Prepare multipart form data for POST /cv/analyze with idempotency key
       const formData = new FormData();
       if (selectedFile) {
         formData.append('file', selectedFile);
@@ -222,15 +228,20 @@ export default function DashboardPage() {
       if (jobTitle.trim()) formData.append('job_title', jobTitle.trim());
       if (companyName.trim()) formData.append('company', companyName.trim());
       formData.append('include_prior_assessments', 'false');
+      formData.append('idempotency_key', activeKey);
 
       // 3. Analyze CV against requirements
       const cvRes = await fetchWithAuth('/cv/analyze', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': activeKey,
+        },
         body: formData,
       });
 
-      // 4. Save backend analysis response to AssessmentContext
+      // 4. Save backend analysis response to AssessmentContext & clear submissionKey
       setAnalysisResult(cvRes);
+      setSubmissionKey(null);
     } catch (err) {
       if (err.status === 401 || (err.message && err.message.includes('401'))) {
         setError('Your session has expired. Redirecting to login page...');
@@ -256,6 +267,7 @@ export default function DashboardPage() {
     setExpandedEvidence({});
     setActiveFilter('All');
     setError(null);
+    setSubmissionKey(null);
     navigate('/dashboard', { replace: true });
   };
 
@@ -562,22 +574,20 @@ export default function DashboardPage() {
             <div className="text-xs" style={{ lineHeight: 1.5, opacity: 0.95 }}>
               {error}
             </div>
-            {(error.includes('502') || error.toLowerCase().includes('bad gateway')) && (
-              <button
-                type="button"
-                onClick={handleAnalyze}
-                className="btn btn-outline text-xs mt-2.5 flex items-center gap-1.5"
-                style={{
-                  padding: '0.35rem 0.75rem',
-                  backgroundColor: '#ffffff',
-                  borderColor: 'var(--danger-color)',
-                  color: 'var(--danger-color)',
-                }}
-              >
-                <RefreshCw size={13} />
-                <span>Retry</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              className="btn btn-outline text-xs mt-2.5 flex items-center gap-1.5"
+              style={{
+                padding: '0.35rem 0.75rem',
+                backgroundColor: '#ffffff',
+                borderColor: 'var(--danger-color)',
+                color: 'var(--danger-color)',
+              }}
+            >
+              <RefreshCw size={13} />
+              <span>Retry Analysis</span>
+            </button>
           </div>
         </div>
       )}
@@ -749,7 +759,7 @@ export default function DashboardPage() {
                     className="input"
                     placeholder="e.g. Senior Frontend Engineer"
                     value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
+                    onChange={(e) => { setJobTitle(e.target.value); setSubmissionKey(null); }}
                   />
                 </div>
 
@@ -761,7 +771,7 @@ export default function DashboardPage() {
                     className="input"
                     placeholder="e.g. TechCorp"
                     value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
+                    onChange={(e) => { setCompanyName(e.target.value); setSubmissionKey(null); }}
                   />
                 </div>
               </div>
@@ -783,7 +793,7 @@ export default function DashboardPage() {
                   rows={7}
                   placeholder="Paste the full job description here, including required skills, preferred skills, and responsibilities..."
                   value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
+                  onChange={(e) => { setJobDescription(e.target.value); setSubmissionKey(null); }}
                   aria-describedby="job-description-help"
                   required
                 />

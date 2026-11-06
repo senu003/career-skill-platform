@@ -42,6 +42,7 @@ export default function HistoryPage() {
   const [newAnalysisJobDesc, setNewAnalysisJobDesc] = useState('');
   const [analyzingMatch, setAnalyzingMatch] = useState(false);
   const [intakeError, setIntakeError] = useState(null);
+  const [historySubmissionKey, setHistorySubmissionKey] = useState(null);
 
   // Format Helper: ISO date string to clean readable format
   const formatDate = (isoString) => {
@@ -241,6 +242,8 @@ export default function HistoryPage() {
     }
 
     setAnalyzingMatch(true);
+    const activeKey = historySubmissionKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `hist_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+    setHistorySubmissionKey(activeKey);
 
     try {
       // 1. Extract requirements
@@ -266,16 +269,21 @@ export default function HistoryPage() {
       formData.append('requirements', JSON.stringify(extractedRequirements));
       if (newAnalysisJobTitle) formData.append('job_title', newAnalysisJobTitle);
       if (newAnalysisCompany) formData.append('company', newAnalysisCompany);
+      formData.append('idempotency_key', activeKey);
 
       // 3. Analyze CV against requirements
       const cvRes = await fetchWithAuth('/cv/analyze', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': activeKey,
+        },
         body: formData,
       });
 
       // 4. Save result in context & close modal
       setAnalysisResult(cvRes);
       setShowNewAnalysisModal(false);
+      setHistorySubmissionKey(null);
 
       // Reset form state
       setNewAnalysisFile(null);

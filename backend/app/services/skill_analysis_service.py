@@ -98,7 +98,7 @@ def get_assessment_result_for_skill(
         )
         if assessed_lvl and matched_attempt.assessed_level != assessed_lvl:
             matched_attempt.assessed_level = assessed_lvl
-            db.commit()
+            db.flush()
 
     gap = calculate_level_gap(matched_attempt.required_level, assessed_lvl)
 
