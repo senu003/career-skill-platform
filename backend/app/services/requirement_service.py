@@ -17,6 +17,21 @@ client = genai.Client(
 class GeminiQuotaError(Exception):
     pass
 
+def _get_ssl_verify():
+    """
+    Returns CA bundle path if custom CA is configured, else True to enforce TLS certificate verification.
+    Supports standard custom CA environment variables:
+    - GROQ_SSL_CERT
+    - SSL_CERT_FILE
+    - REQUESTS_CA_BUNDLE
+    - CURL_CA_BUNDLE
+    """
+    for env_var in ("GROQ_SSL_CERT", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+        ca_path = os.getenv(env_var)
+        if ca_path and os.path.exists(ca_path):
+            return ca_path
+    return True
+
 
 
 def normalize_requirement_level(level: Optional[str]) -> str:
@@ -121,7 +136,7 @@ Company requirements:
             if provider == "groq":
                 import openai
                 import httpx
-                transport = httpx.HTTPTransport(retries=3, verify=False)
+                transport = httpx.HTTPTransport(retries=3, verify=_get_ssl_verify())
                 http_client = httpx.Client(transport=transport, timeout=30.0)
                 groq_client = openai.OpenAI(
                     api_key=os.getenv("GROQ_API_KEY"),
@@ -368,7 +383,7 @@ Return JSON with this exact structure:
                 if provider == "groq":
                     import openai
                     import httpx
-                    transport = httpx.HTTPTransport(retries=3, verify=False)
+                    transport = httpx.HTTPTransport(retries=3, verify=_get_ssl_verify())
                     http_client = httpx.Client(transport=transport, timeout=30.0)
                     groq_client = openai.OpenAI(
                         api_key=os.getenv("GROQ_API_KEY"),

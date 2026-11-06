@@ -13,8 +13,11 @@ from app.auth_deps import (
     validate_jwt_secret,
     create_access_token,
     get_current_user,
+    revoke_token,
+    is_token_revoked,
     KNOWN_INSECURE_SECRETS,
 )
+from app.services.requirement_service import _get_ssl_verify
 from app.services.email_service import (
     is_production,
     is_secure_email_available,
@@ -30,6 +33,7 @@ class TestPhase2SecurityFixes(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
         # Clean up test records
+        self.db.execute(text("DELETE FROM revoked_tokens WHERE user_id IN (SELECT id FROM users WHERE email = 'p2_test@example.com')"))
         self.db.execute(text("DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE email = 'p2_test@example.com')"))
         self.db.execute(text("DELETE FROM users WHERE email = 'p2_test@example.com'"))
         self.db.commit()
@@ -43,6 +47,7 @@ class TestPhase2SecurityFixes(unittest.TestCase):
         self.user_id = self.db.execute(text("SELECT id FROM users WHERE email = 'p2_test@example.com'")).scalar()
 
     def tearDown(self):
+        self.db.execute(text("DELETE FROM revoked_tokens WHERE user_id = :uid"), {"uid": self.user_id})
         self.db.execute(text("DELETE FROM password_reset_tokens WHERE user_id = :uid"), {"uid": self.user_id})
         self.db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": self.user_id})
         self.db.commit()
@@ -197,6 +202,133 @@ class TestPhase2SecurityFixes(unittest.TestCase):
         )
         self.assertIn("JWT_SECRET=${JWT_SECRET}", compose_content)
         self.assertIn("ENVIRONMENT=${ENVIRONMENT:-production}", compose_content)
+
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Fix 3: Inactive-Account Rejection on Protected Endpoints
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def test_inactive_account_token_rejected_on_protected_endpoints(self):
+        """Tokens issued before deactivation must be rejected on protected endpoints with 401."""
+        # 1. Login to receive valid token
+        login_res = self.client.post("/login", data={"username": "p2_test@example.com", "password": "ValidPassword123!"})
+        self.assertEqual(login_res.status_code, 200)
+        token = login_res.json()["access_token"]
+
+        # 2. Access protected endpoint while active
+        me_res = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(me_res.status_code, 200)
+        self.assertEqual(me_res.json()["email"], "p2_test@example.com")
+
+        # 3. Deactivate user in database
+        self.db.execute(text("UPDATE users SET is_active = FALSE WHERE id = :uid"), {"uid": self.user_id})
+        self.db.commit()
+
+        # 4. Token must be rejected when attempting to access /auth/me
+        me_res_inactive = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(me_res_inactive.status_code, 401)
+        self.assertIn("Account is deactivated", me_res_inactive.json().get("detail", ""))
+
+        # 5. Token must be rejected on other protected endpoints (e.g. /cv/latest)
+        cv_res_inactive = self.client.get("/cv/latest", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(cv_res_inactive.status_code, 401)
+        self.assertIn("Account is deactivated", cv_res_inactive.json().get("detail", ""))
+
+        # 6. Subsequent login must be forbidden with 403
+        login_res_inactive = self.client.post("/login", data={"username": "p2_test@example.com", "password": "ValidPassword123!"})
+        self.assertEqual(login_res_inactive.status_code, 403)
+        self.assertIn("Account is deactivated", login_res_inactive.json().get("detail", ""))
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Fix 4: Groq TLS Certificate Verification
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def test_groq_tls_verification_defaults_to_true(self):
+        """By default, _get_ssl_verify() must return True to enforce TLS certificate verification."""
+        with patch.dict(os.environ, {}, clear=False):
+            # Remove custom CA overrides if set
+            for k in ("GROQ_SSL_CERT", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+                os.environ.pop(k, None)
+            verify = _get_ssl_verify()
+            self.assertIs(verify, True)
+
+    def test_groq_tls_verification_supports_custom_ca(self):
+        """When custom CA bundle is specified in env and exists, _get_ssl_verify() returns that path."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as ca_file:
+            ca_file.write(b"-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n")
+            ca_path = ca_file.name
+
+        try:
+            with patch.dict(os.environ, {"GROQ_SSL_CERT": ca_path}, clear=False):
+                verify = _get_ssl_verify()
+                self.assertEqual(verify, ca_path)
+        finally:
+            if os.path.exists(ca_path):
+                os.remove(ca_path)
+
+    def test_requirement_service_contains_no_disabled_tls_verification(self):
+        """Verify requirement_service.py source code has zero occurrences of verify=False."""
+        service_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "services", "requirement_service.py"))
+        with open(service_path, "r", encoding="utf-8") as f:
+            service_code = f.read()
+
+        self.assertNotIn(
+            "verify=False",
+            service_code,
+            "requirement_service.py must not disable TLS verification (verify=False is prohibited)."
+        )
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Fix 5: Server-Side Token Revocation & Store Fallback
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def test_logout_revokes_token_and_rejects_subsequent_use(self):
+        """POST /auth/logout must revoke the bearer token and reject subsequent reuse with 401."""
+        # 1. Login
+        login_res = self.client.post("/login", data={"username": "p2_test@example.com", "password": "ValidPassword123!"})
+        self.assertEqual(login_res.status_code, 200)
+        token = login_res.json()["access_token"]
+
+        # 2. Call protected endpoint before logout
+        res_before = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(res_before.status_code, 200)
+
+        # 3. Call logout
+        logout_res = self.client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(logout_res.status_code, 200)
+        self.assertEqual(logout_res.json()["message"], "Logged out successfully.")
+
+        # 4. Attempt to reuse the revoked token
+        res_after = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(res_after.status_code, 401)
+        self.assertIn("Token has been revoked", res_after.json().get("detail", ""))
+
+        # 5. Verify database revoked_tokens table has record
+        revoked_count = self.db.execute(
+            text("SELECT COUNT(*) FROM revoked_tokens WHERE user_id = :uid"),
+            {"uid": self.user_id}
+        ).scalar()
+        self.assertGreaterEqual(revoked_count, 1)
+
+    def test_token_revocation_store_resilience_when_redis_unavailable(self):
+        """Revocation must fall back to in-memory + database when Redis is offline or raises error."""
+        token = create_access_token({"sub": str(self.user_id)})
+
+        # Simulate Redis unavailability
+        with patch("app.auth_deps.get_redis_client", return_value=None):
+            # Revocation must still succeed
+            revoked = revoke_token(token, db=self.db, user_id=self.user_id)
+            self.assertTrue(revoked)
+
+            # Verification must report token as revoked
+            is_rev = is_token_revoked(token, db=self.db)
+            self.assertTrue(is_rev)
+
+        # Calling protected endpoint with this token must be rejected
+        res = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("Token has been revoked", res.json().get("detail", ""))
 
 
 if __name__ == "__main__":

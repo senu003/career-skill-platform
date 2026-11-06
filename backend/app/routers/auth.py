@@ -40,6 +40,8 @@ from app.auth_deps import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user_required,
+    oauth2_scheme,
+    revoke_token,
 )
 from app.database import get_db
 from app.models import PasswordResetToken, SecurityAuditLog, User
@@ -302,10 +304,16 @@ def google_auth(payload: GoogleLoginRequest, request: Request, db: Session = Dep
 @router.post("/logout")
 def logout(
     request: Request,
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required),
 ):
-    """Record logout event. Client is responsible for dropping the token."""
+    """
+    Revoke bearer token server-side and record logout event.
+    Reused tokens will be rejected across all protected endpoints.
+    """
+    if token:
+        revoke_token(token, db=db, user_id=current_user.id)
     _audit(db, "logout", request, user_id=current_user.id)
     return {"message": "Logged out successfully."}
 
