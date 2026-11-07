@@ -112,7 +112,9 @@ export function parseSkillRow(item, supportedSkills = []) {
     badgeStyle,
     action,
     isActionable,
-    evidenceQuote: item.evidence || ''
+    evidenceQuote: item.evidence || '',
+    attemptId: item.attempt_id || null,
+    completedAt: item.completed_at || null,
   };
 }
 
@@ -561,41 +563,73 @@ export default function SkillMatchTable({
 
                   {/* 6. Action */}
                   <td style={{ padding: '0.95rem 1rem', verticalAlign: 'middle' }}>
-                    {row.isActionable ? (
-                      <button
-                        type="button"
-                        className="skill-action-link"
-                        onClick={() => handleAction(row)}
-                        style={{
-                          background: 'none',
-                          backgroundColor: 'transparent',
-                          border: 'none',
-                          outline: 'none',
-                          boxShadow: 'none',
-                          padding: 0,
-                          margin: 0,
-                          color: '#2563eb',
-                          textDecoration: 'underline',
-                          textUnderlineOffset: '3px',
-                          cursor: 'pointer',
-                          fontSize: '0.85rem',
-                          fontWeight: 500,
-                          fontFamily: 'inherit',
-                        }}
-                      >
-                        {row.action}
-                      </button>
-                    ) : (
-                      <span
-                        className="skill-action-empty"
-                        style={{
-                          color: '#94a3b8',
-                          fontSize: '0.85rem',
-                        }}
-                      >
-                        —
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      {row.isAssessed && row.raw?.attempt_id && (
+                        <button
+                          type="button"
+                          className="skill-review-link"
+                          onClick={() => navigate(`/assessment/review/${row.raw.attempt_id}`)}
+                          style={{
+                            background: 'none',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            outline: 'none',
+                            boxShadow: 'none',
+                            padding: 0,
+                            margin: 0,
+                            color: '#475569',
+                            textDecoration: 'underline',
+                            textUnderlineOffset: '3px',
+                            cursor: 'pointer',
+                            fontSize: '0.82rem',
+                            fontWeight: 500,
+                            fontFamily: 'inherit',
+                            textAlign: 'left',
+                          }}
+                          title={`Review answers for Attempt #${row.raw.attempt_id}`}
+                        >
+                          Review answers
+                        </button>
+                      )}
+                      {row.isActionable ? (
+                        <button
+                          type="button"
+                          className="skill-action-link"
+                          onClick={() => handleAction(row)}
+                          style={{
+                            background: 'none',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            outline: 'none',
+                            boxShadow: 'none',
+                            padding: 0,
+                            margin: 0,
+                            color: '#2563eb',
+                            textDecoration: 'underline',
+                            textUnderlineOffset: '3px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            fontFamily: 'inherit',
+                            textAlign: 'left',
+                          }}
+                        >
+                          {row.action}
+                        </button>
+                      ) : (
+                        !row.isAssessed && (
+                          <span
+                            className="skill-action-empty"
+                            style={{
+                              color: '#94a3b8',
+                              fontSize: '0.85rem',
+                            }}
+                          >
+                            —
+                          </span>
+                        )
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

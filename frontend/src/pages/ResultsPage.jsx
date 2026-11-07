@@ -33,7 +33,7 @@ export default function ResultsPage() {
   const { skill, attemptId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { analysisResult } = useAssessment();
+  const { analysisResult, refreshAnalysis } = useAssessment();
 
 
   const queryAttemptId = searchParams.get('attempt_id') || searchParams.get('attemptId');
@@ -50,6 +50,14 @@ export default function ResultsPage() {
 
   const hasResultRef = React.useRef(false);
   const hasReviewRef = React.useRef(false);
+
+  useEffect(() => {
+    if (analysisId && refreshAnalysis) {
+      refreshAnalysis(analysisId).catch((err) => {
+        console.warn('Could not refresh analysis session on results mount:', err);
+      });
+    }
+  }, [analysisId, refreshAnalysis]);
 
   const fallbackSkill = React.useMemo(() => {
     const skills = analysisResult?.skills || [];

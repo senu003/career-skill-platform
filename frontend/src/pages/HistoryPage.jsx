@@ -927,6 +927,26 @@ export default function HistoryPage() {
                           </span>
                         </>
                       )}
+
+                      {sess.assessed_skills_count > 0 && (
+                        <>
+                          <span style={{ color: 'var(--border-color)' }}>•</span>
+                          <span
+                            className="badge"
+                            style={{
+                              backgroundColor: '#f0fdf4',
+                              color: '#166534',
+                              border: '1px solid #bbf7d0',
+                              fontSize: '0.72rem',
+                              padding: '0.15rem 0.5rem',
+                              fontWeight: 600,
+                            }}
+                            title="Assessments reflect latest verified attempts"
+                          >
+                            ✓ Latest verified tests
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 

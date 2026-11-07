@@ -80,6 +80,10 @@ function App() {
                   element={<PrivateRoute><AssessmentReviewPage /></PrivateRoute>}
                 />
                 <Route
+                  path="/assessment/review/:attemptId"
+                  element={<PrivateRoute><AssessmentReviewPage /></PrivateRoute>}
+                />
+                <Route
                   path="/results/:skill"
                   element={<PrivateRoute><ResultsPage /></PrivateRoute>}
                 />

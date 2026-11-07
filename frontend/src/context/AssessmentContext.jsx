@@ -63,6 +63,8 @@ export function AssessmentProvider({ children }) {
           matched: s.matched,
           cv_match_status: s.cv_match_status,
           cv_level: s.cv_level,
+          attempt_id: resultData.attempt_id !== undefined ? resultData.attempt_id : s.attempt_id,
+          completed_at: resultData.completed_at !== undefined ? resultData.completed_at : s.completed_at,
           assessed_level: resultData.assessed_level !== undefined ? resultData.assessed_level : s.assessed_level,
           level_gap: resultData.level_gap !== undefined ? resultData.level_gap : s.level_gap,
           total_score: resultData.total_score !== undefined ? resultData.total_score : s.total_score,

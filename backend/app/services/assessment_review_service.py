@@ -107,7 +107,7 @@ def get_assessment_review(db: Session, attempt_id: int, current_user_id: int) ->
     }
 
 
-def get_user_weakness_analysis(db: Session, user_id: int) -> Dict[str, Any]:
+def get_user_weakness_analysis(db: Session, user_id: int, analysis_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Rule-based personal weakness finder and targeted revision analyzer.
     Aggregates user's historical answers across all completed attempts,
@@ -162,7 +162,45 @@ def get_user_weakness_analysis(db: Session, user_id: int) -> Dict[str, Any]:
             "insufficient_data_topics": []
         }
 
-    attempt_ids = [a.id for a in completed_attempts]
+    from app.services.skill_analysis_service import select_eligible_assessment_attempt
+    from app.models import Analysis, Job
+    import json
+
+    selected_attempts: List[AssessmentAttempt] = []
+    if analysis_id is not None:
+        analysis_obj = db.query(Analysis).filter(Analysis.id == analysis_id, Analysis.user_id == user_id).first()
+        session_skills = []
+        if analysis_obj and analysis_obj.raw_analysis_data:
+            try:
+                parsed_raw = json.loads(str(analysis_obj.raw_analysis_data))
+                if isinstance(parsed_raw, list):
+                    session_skills = [s.get("skill") for s in parsed_raw if isinstance(s, dict) and s.get("skill")]
+            except Exception:
+                pass
+        if not session_skills and analysis_obj and analysis_obj.job_id:
+            job_obj = db.query(Job).filter(Job.id == analysis_obj.job_id).first()
+            if job_obj and job_obj.description:
+                try:
+                    parsed_job = json.loads(str(job_obj.description))
+                    if isinstance(parsed_job, list):
+                        session_skills = [s.get("skill") for s in parsed_job if isinstance(s, dict) and s.get("skill")]
+                except Exception:
+                    pass
+        target_skills = session_skills if session_skills else canonical_supported
+        for sk in target_skills:
+            att = select_eligible_assessment_attempt(db, sk, user_id=user_id, analysis_id=analysis_id, include_prior=True)
+            if att and att not in selected_attempts:
+                selected_attempts.append(att)
+    else:
+        for sk in canonical_supported:
+            att = select_eligible_assessment_attempt(db, sk, user_id=user_id, analysis_id=None, include_prior=True)
+            if att and att not in selected_attempts:
+                selected_attempts.append(att)
+
+    if not selected_attempts:
+        selected_attempts = completed_attempts
+
+    attempt_ids = [a.id for a in selected_attempts]
 
     answers_rows = (
         db.query(AssessmentAnswer, AssessmentQuestion, AssessmentAttempt)
@@ -353,7 +391,7 @@ def get_user_weakness_analysis(db: Session, user_id: int) -> Dict[str, Any]:
     return {
         "has_sufficient_data": has_sufficient,
         "message": msg,
-        "total_attempts_analyzed": len(completed_attempts),
+        "total_attempts_analyzed": len(selected_attempts),
         "total_assessments_completed": len(completed_attempts),
         "total_questions_analyzed": total_all_answered,
         "overall_accuracy": overall_acc,
