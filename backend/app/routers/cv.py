@@ -356,6 +356,8 @@ def get_past_analysis_sessions(
             "is_preliminary": combined.get("is_preliminary", True),
             "recommendation_confidence": combined.get("recommendation_confidence"),
             "assessed_skills_count": assessed_count,
+            "assessment_view_mode": "latest_verified",
+            "assessment_view_label": "Report assessments reflect latest verified attempts",
             "status_badge": "Analysis Complete",
             "created_at": getattr(a, "created_at").isoformat() if getattr(a, "created_at", None) is not None else None
         })

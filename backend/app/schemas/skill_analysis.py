@@ -55,9 +55,12 @@ class FinalSkillItemSchema(BaseModel):
     evidence: Optional[str] = Field(None, description="Contextual snippet evidence if matched")
     improvement_probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted probability of skill improvement based on longitudinal ML model")
     actionable_feedback: Optional[ActionableFeedbackSchema] = Field(None, description="Actionable CV feedback")
+    attempt_id: Optional[int] = Field(None, description="Assessment attempt ID")
+    completed_at: Optional[str] = Field(None, description="ISO timestamp when attempt was completed")
 
 
 class CombinedAnalysisResponseSchema(BaseModel):
+    analysis_id: Optional[int] = Field(None, description="Analysis session ID")
     filename: Optional[str] = None
     pages: Optional[int] = None
     matched_skills: List[FinalSkillItemSchema]
@@ -71,5 +74,5 @@ class CombinedAnalysisResponseSchema(BaseModel):
     priority_skills: Optional[List[Dict[str, Any]]] = Field(None, description="Top priority skills requiring candidate attention")
     is_preliminary: Optional[bool] = Field(None, description="Whether this readiness verdict is preliminary pending technical assessments")
     verification_status: Optional[str] = Field(None, description="Clear statement on technical verification status")
-
-
+    assessment_view_mode: Optional[str] = Field("latest_verified", description="Attempt selection mode")
+    assessment_view_label: Optional[str] = Field("Report assessments reflect latest verified attempts", description="Display label for assessment consistency mode")

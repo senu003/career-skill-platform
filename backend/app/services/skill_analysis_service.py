@@ -38,6 +38,53 @@ def calculate_level_gap(required_level: Optional[str], assessed_level: Optional[
     return max(0, req_val - ass_val)
 
 
+def select_eligible_assessment_attempt(
+    db: Session,
+    skill: str,
+    user_id: int,
+    analysis_id: Optional[int] = None,
+    include_prior: bool = True,
+) -> Optional[AssessmentAttempt]:
+    """
+    Centralized attempt selection rule:
+    Returns the latest eligible completed attempt for a given user and skill with a stable tie-break.
+
+    Rules:
+    1. Only completed attempts (completed_at is not None) are eligible. In-progress retakes are excluded.
+    2. Attempt must belong to user_id.
+    3. Attempt matches skill name or its canonical variants (case-insensitive).
+    4. Session scope precedence:
+       - If analysis_id is provided, prioritize completed attempts associated with that analysis_id.
+       - If none found in this analysis session and include_prior is True, fall back to the latest
+         completed attempt across previous sessions / standalone attempts.
+       - If analysis_id is None and include_prior is True, pick the latest completed attempt.
+       - If include_prior is False and no session attempt exists, returns None.
+    5. Stable tie-break: order by completed_at.desc(), id.desc().
+    """
+    if not skill or not skill.strip() or user_id is None:
+        return None
+
+    skill_clean = skill.strip().lower()
+    variants = get_skill_variants(skill)
+    variants_lower = list({v.strip().lower() for v in variants} | {skill_clean})
+
+    # Base query for completed attempts for this user and skill
+    base_query = db.query(AssessmentAttempt).filter(
+        AssessmentAttempt.user_id == user_id,
+        AssessmentAttempt.completed_at.isnot(None),
+        func.lower(AssessmentAttempt.skill).in_(variants_lower)
+    ).order_by(AssessmentAttempt.completed_at.desc(), AssessmentAttempt.id.desc())
+
+    if analysis_id is not None:
+        session_attempt = base_query.filter(AssessmentAttempt.analysis_id == analysis_id).first()
+        if session_attempt is not None:
+            return session_attempt
+        if not include_prior:
+            return None
+
+    return base_query.first()
+
+
 def get_assessment_result_for_skill(
     db: Session,
     skill: str,
@@ -46,40 +93,19 @@ def get_assessment_result_for_skill(
     include_prior: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
-    Retrieves completed assessment result for a given skill.
+    Retrieves completed assessment result for a given skill using centralized attempt selection.
     If include_prior is False, strictly checks attempts for the given analysis_id.
     """
-    if not skill or not skill.strip():
+    if not skill or not skill.strip() or user_id is None:
         return None
 
-    skill_clean = skill.strip()
-    variants = get_skill_variants(skill_clean)
-    variants_lower = [v.lower() for v in variants]
-
-    if user_id is None:
-        return None
-
-    base_query = db.query(AssessmentAttempt).filter(
-        AssessmentAttempt.completed_at.isnot(None),
-        AssessmentAttempt.user_id == user_id,
-    ).order_by(AssessmentAttempt.completed_at.desc(), AssessmentAttempt.id.desc())
-
-    if analysis_id is not None:
-        session_attempts = base_query.filter(AssessmentAttempt.analysis_id == analysis_id).all()
-        if session_attempts or not include_prior:
-            attempts = session_attempts
-        else:
-            attempts = base_query.all()
-    else:
-        attempts = base_query.all() if include_prior else []
-
-    # Find attempt matching skill name or any variant
-    matched_attempt = None
-    for attempt in attempts:
-        attempt_skill_lower = attempt.skill.strip().lower()
-        if attempt_skill_lower in variants_lower or skill_clean.lower() == attempt_skill_lower:
-            matched_attempt = attempt
-            break
+    matched_attempt = select_eligible_assessment_attempt(
+        db=db,
+        skill=skill,
+        user_id=user_id,
+        analysis_id=analysis_id,
+        include_prior=include_prior,
+    )
 
     if not matched_attempt:
         return None
@@ -109,6 +135,10 @@ def get_assessment_result_for_skill(
         skill=matched_attempt.skill,
         current_attempt_id=matched_attempt.id
     )
+
+    skill_clean = skill.strip()
+    variants = get_skill_variants(skill_clean)
+    variants_lower = [v.lower() for v in variants]
 
     # Calculate retake telemetry (attempt_count and previous_best_score)
     all_skill_attempts = db.query(AssessmentAttempt).filter(
@@ -147,7 +177,8 @@ def get_assessment_result_for_skill(
         "recommendation_confidence": model1_conf,
         "improvement_probability": improvement_prob,
         "attempt_count": attempt_count,
-        "previous_best_score": previous_best_score
+        "previous_best_score": previous_best_score,
+        "completed_at": matched_attempt.completed_at.isoformat() if matched_attempt.completed_at else None,
     }
 
 
@@ -492,6 +523,7 @@ def combine_cv_and_assessment(
 
         entry = {
             "attempt_id": assessment_data.get("attempt_id") if assessment_data else item.get("attempt_id"),
+            "completed_at": assessment_data.get("completed_at") if assessment_data else item.get("completed_at"),
             "skill": skill_name,
             "level": req_level,
             "required_level": req_level,
@@ -562,6 +594,9 @@ def combine_cv_and_assessment(
         combined_result["priority_skills"] = None
         combined_result["is_preliminary"] = True
         combined_result["verification_status"] = "Unverified (Preliminary CV Evidence)"
+
+    combined_result["assessment_view_mode"] = "latest_verified"
+    combined_result["assessment_view_label"] = "Report assessments reflect latest verified attempts"
 
     return combined_result
 

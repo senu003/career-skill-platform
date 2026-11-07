@@ -87,11 +87,12 @@ export default function FinalResultPage() {
   // 2. Load Session Detail if URL analysis_id is provided
   useEffect(() => {
     let isCancelled = false;
-    if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
+    const targetId = urlAnalysisId || analysisResult?.analysis_id;
+    if (targetId) {
       const fetchSession = async () => {
         setLoadingAgg(true);
         try {
-          const detailRes = await fetchWithAuth(`/cv/sessions/${urlAnalysisId}`);
+          const detailRes = await fetchWithAuth(`/cv/sessions/${targetId}`);
           if (!isCancelled && detailRes) {
             setAnalysisResult(detailRes);
           }
@@ -116,7 +117,10 @@ export default function FinalResultPage() {
   const fetchWeaknessData = useCallback(async () => {
     setLoadingWeakness(true);
     try {
-      const res = await fetchWithAuth('/assessment/revision/weaknesses');
+      const ep = activeAnalysisId
+        ? `/assessment/revision/weaknesses?analysis_id=${encodeURIComponent(activeAnalysisId)}`
+        : '/assessment/revision/weaknesses';
+      const res = await fetchWithAuth(ep);
       if (res) {
         setWeaknessData(res);
       }
@@ -125,7 +129,7 @@ export default function FinalResultPage() {
     } finally {
       setLoadingWeakness(false);
     }
-  }, []);
+  }, [activeAnalysisId]);
 
   useEffect(() => {
     fetchWeaknessData();
@@ -277,7 +281,7 @@ export default function FinalResultPage() {
   }, [skillsList, model1Filter, masteredSkills, upgradeSkills, speedSkills, relearnSkills, unassessedSkills]);
 
   // Model 2 Final Verdict & Reasons
-  const finalVerdict = analysisResult?.readiness_verdict || analysisResult?.final_verdict || aggregationData?.readiness_verdict || aggregationData?.final_verdict || 'Short-Term Prep';
+  const finalVerdict = aggregationData?.readiness_verdict || aggregationData?.final_verdict || analysisResult?.readiness_verdict || analysisResult?.final_verdict || 'Short-Term Prep';
   const assessedSkillsCount = useMemo(() => skillsList.filter((s) => s.assessed_level !== null && s.assessed_level !== undefined).length, [skillsList]);
   const isPreliminary = Boolean(analysisResult?.is_preliminary ?? aggregationData?.is_preliminary ?? (assessedSkillsCount === 0));
 

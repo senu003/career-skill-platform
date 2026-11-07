@@ -1,5 +1,5 @@
 from typing import Optional, Dict, List, cast
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -161,13 +161,23 @@ def get_candidate_history(user_id: int, db: Session = Depends(get_db), current_u
 
 @router.get("/revision/weaknesses", response_model=TargetedRevisionResponse)
 def get_user_revision_weaknesses(
+    analysis_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required)
 ):
     """
     Returns rule-based topic accuracy, identified weakness topics, and targeted revision recommendations.
+    When analysis_id is provided, scopes the analysis to the selected attempts for that report session.
     """
-    return get_user_weakness_analysis(db=db, user_id=cast(int, current_user.id))
+    if analysis_id is not None:
+        analysis = db.query(Analysis).filter(
+            Analysis.id == analysis_id,
+            Analysis.user_id == current_user.id
+        ).first()
+        if not analysis:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis session not found")
+
+    return get_user_weakness_analysis(db=db, user_id=cast(int, current_user.id), analysis_id=analysis_id)
 
 
 @router.get("/interview-prep/summary", response_model=InterviewPrepSummaryResponse)

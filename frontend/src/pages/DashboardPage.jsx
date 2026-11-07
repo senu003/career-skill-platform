@@ -102,10 +102,11 @@ export default function DashboardPage() {
   // Sync session from URL if explicit analysis_id is provided
   useEffect(() => {
     let isCancelled = false;
-    if (urlAnalysisId && String(analysisResult?.analysis_id) !== String(urlAnalysisId)) {
+    const targetId = urlAnalysisId || analysisResult?.analysis_id;
+    if (targetId) {
       const fetchSession = async () => {
         try {
-          const res = await fetchWithAuth(`/cv/sessions/${urlAnalysisId}`);
+          const res = await fetchWithAuth(`/cv/sessions/${targetId}`);
           if (!isCancelled && res) {
             setAnalysisResult(res);
           }

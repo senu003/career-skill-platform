@@ -6,12 +6,11 @@ import { useAssessment } from '../context/AssessmentContext';
 import { isSupportedSkill } from '../utils/supportedSkills';
 import { formatLevel, formatTime } from '../utils/formatters';
 
-
 export default function AssessmentPage() {
   const { skill } = useParams();
   const [searchParams] = useSearchParams();
-  const { analysisResult } = useAssessment();
-  const analysisId = searchParams.get('analysis_id') || analysisResult?.analysis_id;
+  const { analysisResult, refreshAnalysis } = useAssessment();
+  const analysisId = searchParams.get('analysis_id');
   const navigate = useNavigate();
 
   const normalizedSkill = skill ? decodeURIComponent(skill) : '';
@@ -23,15 +22,12 @@ export default function AssessmentPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // User Interaction State
-  const [needsLevelSelection, setNeedsLevelSelection] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [timeTakenSeconds, setTimeTakenSeconds] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
-
-
 
   // Determine required level from AssessmentContext or return 'unspecified'
   const getRequiredLevel = useCallback(() => {
@@ -76,7 +72,6 @@ export default function AssessmentPage() {
   };
 
   const nextSupportedSkill = getNextSupportedSkill();
-
   const topicParam = searchParams.get('topic');
 
   // Assessment Setup with specific target level (POST /assessment/start)
@@ -113,7 +108,6 @@ export default function AssessmentPage() {
       setCurrentIndex(0);
       setSelectedAnswer('');
       setTimeTakenSeconds(0);
-      setNeedsLevelSelection(false);
     } catch (err) {
       setError(err.message || 'Failed to start technical assessment. Please try again.');
     } finally {
@@ -129,26 +123,23 @@ export default function AssessmentPage() {
     }
 
     const detectedLevel = getRequiredLevel();
-    if (detectedLevel && ['basic', 'intermediate', 'advanced'].includes(detectedLevel)) {
-      setNeedsLevelSelection(false);
-      startAssessmentWithLevel(detectedLevel);
-    } else {
-      // Required level is unspecified or not present -> prompt candidate to choose target level
-      setNeedsLevelSelection(true);
-      setLoading(false);
-    }
+    const effectiveLevel = (detectedLevel && ['basic', 'intermediate', 'advanced'].includes(detectedLevel))
+      ? detectedLevel
+      : 'advanced';
+
+    startAssessmentWithLevel(effectiveLevel);
   }, [normalizedSkill, getRequiredLevel, startAssessmentWithLevel]);
 
   // Question Timer Interval (tracks time spent on current question in seconds)
   useEffect(() => {
-    if (loading || submitting || error || needsLevelSelection || questions.length === 0) return;
+    if (loading || submitting || error || questions.length === 0) return;
 
     const timer = setInterval(() => {
       setTimeTakenSeconds((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [loading, submitting, error, needsLevelSelection, currentIndex, questions.length]);
+  }, [loading, submitting, error, currentIndex, questions.length]);
 
   // Current Question Object
   const currentQuestion = questions[currentIndex];
@@ -194,11 +185,23 @@ export default function AssessmentPage() {
           method: 'POST',
         });
 
-        // 4. Navigate to individual result page
+        // 4. Authoritatively refresh analysis session in context if tied to a report
+        if (analysisId && refreshAnalysis) {
+          try {
+            await refreshAnalysis(analysisId);
+          } catch (rErr) {
+            console.warn('Could not refresh analysis session:', rErr);
+          }
+        }
+
+        // 5. Navigate to individual result page with attempt_id
         const resultPath = `/results/${encodeURIComponent(normalizedSkill)}`;
-        navigate(analysisId ? `${resultPath}?analysis_id=${encodeURIComponent(analysisId)}` : resultPath);
+        const queryParams = new URLSearchParams();
+        if (analysisId) queryParams.set('analysis_id', analysisId);
+        queryParams.set('attempt_id', attemptId);
+        navigate(`${resultPath}?${queryParams.toString()}`);
       } else {
-        // 5. Advance to next question
+        // Advance to next question
         setCurrentIndex((prev) => prev + 1);
         setSelectedAnswer('');
         setTimeTakenSeconds(0);
@@ -212,125 +215,14 @@ export default function AssessmentPage() {
 
   const handleRetry = () => {
     const detectedLevel = getRequiredLevel();
-    if (detectedLevel && ['basic', 'intermediate', 'advanced'].includes(detectedLevel)) {
-      startAssessmentWithLevel(detectedLevel);
-    } else {
-      setNeedsLevelSelection(true);
-      setError(null);
-    }
+    const effectiveLevel = (detectedLevel && ['basic', 'intermediate', 'advanced'].includes(detectedLevel))
+      ? detectedLevel
+      : 'advanced';
+    setError(null);
+    startAssessmentWithLevel(effectiveLevel);
   };
 
-  // RENDER 1: Target Level Selection Prompt (When job requirement level is Unspecified)
-  if (needsLevelSelection && !loading) {
-    return (
-      <div className="assessment-container fade-in mt-4" style={{ paddingTop: '1.5rem' }}>
-        <div className="page-header text-center mb-6">
-          <span className="badge badge-purple mb-2">Technical Assessment</span>
-          <h1 className="page-title">{normalizedSkill}</h1>
-          <p className="text-muted text-sm mt-1">
-            Target proficiency level selection required
-          </p>
-        </div>
-
-        <div className="card text-center" style={{ padding: '2.5rem 2rem', maxWidth: '680px', margin: '0 auto' }}>
-          <div className="badge badge-purple mb-3" style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>
-            Requirement Level: Unspecified
-          </div>
-          <h2 className="card-title text-xl mb-2">Select Assessment Level</h2>
-          <p className="text-muted text-sm mb-6" style={{ maxWidth: '520px', margin: '0 auto 1.75rem', lineHeight: 1.5 }}>
-            The job description did not specify a required proficiency level for <strong>{normalizedSkill}</strong>. Please select the target level you wish to be assessed against:
-          </p>
-
-          {error && (
-            <div className="alert-error flex items-center justify-center gap-2 mb-6" style={{ margin: '0 auto 1.5rem' }}>
-              <AlertCircle size={18} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <button
-              type="button"
-              onClick={() => startAssessmentWithLevel('basic')}
-              className="card option-card text-left"
-              style={{
-                padding: '1.25rem',
-                border: '1.5px solid var(--border-color)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem',
-                margin: 0
-              }}
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>Basic</span>
-                <ArrowRight size={16} style={{ color: 'var(--primary-600)' }} />
-              </div>
-              <div className="font-semibold text-main text-sm" style={{ marginTop: '0.25rem' }}>Basic Level</div>
-              <div className="text-xs text-muted" style={{ lineHeight: 1.4 }}>Core syntax, fundamental concepts, and basic programming logic.</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => startAssessmentWithLevel('intermediate')}
-              className="card option-card text-left"
-              style={{
-                padding: '1.25rem',
-                border: '1.5px solid var(--border-color)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem',
-                margin: 0
-              }}
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>Intermediate</span>
-                <ArrowRight size={16} style={{ color: 'var(--primary-600)' }} />
-              </div>
-              <div className="font-semibold text-main text-sm" style={{ marginTop: '0.25rem' }}>Intermediate Level</div>
-              <div className="text-xs text-muted" style={{ lineHeight: 1.4 }}>Practical application, standard APIs, and common patterns.</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => startAssessmentWithLevel('advanced')}
-              className="card option-card text-left"
-              style={{
-                padding: '1.25rem',
-                border: '1.5px solid var(--border-color)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem',
-                margin: 0
-              }}
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className="badge badge-purple" style={{ fontSize: '0.75rem' }}>Advanced</span>
-                <ArrowRight size={16} style={{ color: 'var(--primary-600)' }} />
-              </div>
-              <div className="font-semibold text-main text-sm" style={{ marginTop: '0.25rem' }}>Advanced Level</div>
-              <div className="text-xs text-muted" style={{ lineHeight: 1.4 }}>In-depth architecture, performance optimization, and edge cases.</div>
-            </button>
-          </div>
-
-          <div className="flex justify-center pt-2">
-            <button onClick={() => navigate('/dashboard')} className="btn btn-outline">
-              <ArrowLeft size={16} />
-              <span>Back to Dashboard</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // RENDER 2: Loading State
+  // RENDER 1: Loading State
   if (loading) {
     return (
       <div className="assessment-container fade-in text-center mt-4" style={{ paddingTop: '3rem' }}>
@@ -343,7 +235,7 @@ export default function AssessmentPage() {
     );
   }
 
-  // RENDER 3: Initial Start Error State
+  // RENDER 2: Initial Start Error State
   if (error) {
     const isUnsupported = !isSupportedSkill(normalizedSkill) || error.toLowerCase().includes('unsupported');
     return (
@@ -356,11 +248,11 @@ export default function AssessmentPage() {
           <h2 className="card-title mb-2">Assessment Unavailable</h2>
           <p className="text-muted text-sm mb-6" style={{ maxWidth: '500px', margin: '0 auto 1.5rem' }}>
             {isUnsupported
-              ? `Technical MCQ assessment is currently available for JavaScript, React, and PostgreSQL. Assessment for ${normalizedSkill || 'this skill'} is not yet supported.`
+              ? `Technical MCQ assessment is currently available for JavaScript, React, PostgreSQL, and Docker. Assessment for ${normalizedSkill || 'this skill'} is not yet supported.`
               : `Unable to load the assessment for ${normalizedSkill || 'this skill'}.`}
           </p>
           <div className="flex justify-center gap-3 flex-wrap">
-            <button onClick={() => navigate('/dashboard')} className="btn btn-outline">
+            <button onClick={() => navigate(analysisId ? `/dashboard?analysis_id=${encodeURIComponent(analysisId)}` : '/dashboard')} className="btn btn-outline">
               <ArrowLeft size={16} />
               <span>Back to Dashboard</span>
             </button>
@@ -417,7 +309,9 @@ export default function AssessmentPage() {
         </div>
         <h1 className="page-title">{normalizedSkill}</h1>
         <p className="page-subtitle font-semibold" style={{ color: 'var(--primary-700)' }}>
-          Required Level: {formatLevel(requiredLevelState)}
+          {getRequiredLevel() && getRequiredLevel() !== 'unspecified'
+            ? `Required Level: ${formatLevel(requiredLevelState)}`
+            : `Adaptive Assessment (Starts at Basic)`}
         </p>
       </div>
 
@@ -496,7 +390,7 @@ export default function AssessmentPage() {
         {/* Navigation Footer */}
         <div className="flex justify-between items-center mt-6 pt-4" style={{ borderTop: '1px solid var(--border-color)' }}>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(analysisId ? `/dashboard?analysis_id=${encodeURIComponent(analysisId)}` : '/dashboard')}
             disabled={submitting}
             className="btn btn-outline text-xs"
             style={{ padding: '0.4rem 0.85rem' }}
