@@ -33,14 +33,18 @@ def test_cors_untrusted_origin():
 
 
 def test_global_exception_handler():
-    # A better approach: we can just use the login endpoint and mock the db call
+    # Login endpoint with simulated unexpected error
     with patch("sqlalchemy.orm.Query.first", side_effect=ValueError("Database secret leak")):
         response = client.post(
             "/login",
             data={"username": "test@test.com", "password": "password"}
         )
         assert response.status_code == 500
-        assert response.json() == {"detail": "Internal server error"}
+        data = response.json()
+        assert data["detail"] == "Internal server error"
+        assert data["error_code"] == "INTERNAL_SERVER_ERROR"
+        assert "request_id" in data
+        assert response.headers.get("x-request-id") == data["request_id"]
 
 
 def test_sqlalchemy_exception_handler():
@@ -51,7 +55,11 @@ def test_sqlalchemy_exception_handler():
             data={"username": "test@test.com", "password": "password"}
         )
         assert response.status_code == 500
-        assert response.json() == {"detail": "Internal server error"}
+        data = response.json()
+        assert data["detail"] == "Internal server error"
+        assert data["error_code"] == "DATABASE_ERROR"
+        assert "request_id" in data
+        assert response.headers.get("x-request-id") == data["request_id"]
 
 
 def test_intentional_http_exception_preserved():
@@ -59,16 +67,19 @@ def test_intentional_http_exception_preserved():
     response = client.get("/cv/sessions/999999")
     assert response.status_code == 401 # Because it's unauthorized first!
 
-    # Let's mock a user token to get 404
+    # Mock user token to test 404
     from app.auth_deps import get_current_user_required
     from app.models import User
-    
+
     mock_user = User(id=1, email="test@test.com")
     app.dependency_overrides[get_current_user_required] = lambda: mock_user
-    
+
     response = client.get("/cv/sessions/999999")
     assert response.status_code == 404
-    assert response.json() == {"detail": "Analysis session not found."}
+    data = response.json()
+    assert data["detail"] == "Analysis session not found."
+    assert "request_id" in data
+    assert response.headers.get("x-request-id") == data["request_id"]
     app.dependency_overrides.pop(get_current_user_required, None)
 
 
@@ -81,7 +92,10 @@ def test_global_exception_handler_preserves_cors_headers():
         )
         assert response.status_code == 500
         assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
-        assert response.json() == {"detail": "Internal server error"}
+        data = response.json()
+        assert data["detail"] == "Internal server error"
+        assert "request_id" in data
+        assert response.headers.get("x-request-id") == data["request_id"]
 
 
 def test_google_auth_invalid_token_returns_401_with_cors():
@@ -93,6 +107,8 @@ def test_google_auth_invalid_token_returns_401_with_cors():
     assert response.status_code == 401
     assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
     assert "Invalid Google credentials" in response.json()["detail"]
+    assert "request_id" in response.json()
+    assert response.headers.get("x-request-id") == response.json()["request_id"]
 
 
 def test_google_auth_successful_login_and_user_creation():
@@ -117,3 +133,4 @@ def test_google_auth_successful_login_and_user_creation():
         assert data["user"]["name"] == "Verified Google Candidate"
         assert data["user"]["oauth_provider"] == "google"
         assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        assert response.headers.get("x-request-id") is not None

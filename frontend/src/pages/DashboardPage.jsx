@@ -46,6 +46,9 @@ export default function DashboardPage() {
   // UI Flow State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fileError, setFileError] = useState(null);
+  const [jdError, setJdError] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
   const [expandedEvidence, setExpandedEvidence] = useState({});
   const [activeFilter, setActiveFilter] = useState('All');
   const [supportedSkillsList, setSupportedSkillsList] = useState([]);
@@ -59,6 +62,20 @@ export default function DashboardPage() {
       [skillKey]: !prev[skillKey],
     }));
   };
+
+  // Restore draft form state if recovering from expired session
+  useEffect(() => {
+    try {
+      const draftStr = sessionStorage.getItem("career_analysis_intake_draft");
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft.jobTitle) setJobTitle(draft.jobTitle);
+        if (draft.companyName) setCompanyName(draft.companyName);
+        if (draft.jobDescription) setJobDescription(draft.jobDescription);
+        sessionStorage.removeItem("career_analysis_intake_draft");
+      }
+    } catch {}
+  }, []);
 
   // Fetch supported assessment skills from /assessment/supported-skills
   useEffect(() => {
@@ -154,18 +171,20 @@ export default function DashboardPage() {
 
   const validateAndSetFile = (file) => {
     setError(null);
+    setFileError(null);
+    setAnalysisError(null);
     if (!file) return;
 
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Please select a valid PDF document (.pdf).');
+      setFileError('Please select a valid PDF document (.pdf).');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      setError('File size exceeds 10MB limit. Please upload a smaller PDF.');
+      setFileError('File size exceeds 10MB limit. Please upload a smaller PDF.');
       return;
     }
     if (file.size === 0) {
-      setError('The uploaded PDF appears empty or unreadable. Please ensure it contains readable text.');
+      setFileError('The uploaded PDF appears empty or unreadable. Please ensure it contains readable text.');
       return;
     }
 
@@ -186,16 +205,22 @@ export default function DashboardPage() {
   const handleAnalyze = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setError(null);
+    setFileError(null);
+    setJdError(null);
+    setAnalysisError(null);
 
+    let hasValidationErr = false;
     if (!selectedFile && !useSavedCv) {
-      setError('Please upload your CV PDF or choose your saved CV.');
-      return;
+      setFileError('Please upload your CV PDF or choose your saved CV.');
+      hasValidationErr = true;
     }
 
     if (jobDescriptionWordCount < 10) {
-      setError('Please paste a more detailed job description with at least 10 words so we can identify the required skills.');
-      return;
+      setJdError('Please paste a more detailed job description with at least 10 words so we can identify the required skills.');
+      hasValidationErr = true;
     }
+
+    if (hasValidationErr) return;
 
     setLoading(true);
     // Reuse existing submission key for retrying the same submission, or generate a fresh key
@@ -244,15 +269,32 @@ export default function DashboardPage() {
       setAnalysisResult(cvRes);
       setSubmissionKey(null);
     } catch (err) {
+      const supportRef = err.requestId || err.supportReference || null;
+
       if (err.status === 401 || (err.message && err.message.includes('401'))) {
+        try {
+          sessionStorage.setItem('career_analysis_intake_draft', JSON.stringify({
+            jobTitle,
+            companyName,
+            jobDescription,
+          }));
+        } catch {}
         setError('Your session has expired. Redirecting to login page...');
         setTimeout(() => {
           navigate('/login');
         }, 1500);
-      } else if (err.status === 502 || (err.message && err.message.includes('502'))) {
-        setError('The AI analysis service is temporarily unavailable (502 Bad Gateway). Please try again shortly.');
       } else {
+        const errorInfo = {
+          message: err.message || 'An error occurred while analyzing match. Please try again.',
+          requestId: supportRef,
+          supportReference: supportRef,
+          status: err.status,
+          isNetworkError: err.isNetworkError || false,
+        };
+        setAnalysisError(errorInfo);
         setError(err.message || 'An error occurred while analyzing match. Please try again.');
+        // Note: form inputs (jobTitle, companyName, jobDescription, selectedFile, savedCv)
+        // and submissionKey are preserved for retrying the same submission!
       }
     } finally {
       setLoading(false);
@@ -575,6 +617,11 @@ export default function DashboardPage() {
             <div className="text-xs" style={{ lineHeight: 1.5, opacity: 0.95 }}>
               {error}
             </div>
+            {analysisError?.supportReference && (
+              <div className="text-xs mt-1.5 font-mono" style={{ opacity: 0.9, wordBreak: "break-all" }}>
+                Support Reference: <strong>{analysisError.supportReference}</strong>
+              </div>
+            )}
             <button
               type="button"
               onClick={handleAnalyze}
@@ -742,6 +789,16 @@ export default function DashboardPage() {
                   </button>
                 </div>
               )}
+              {fileError && (
+                <div
+                  role="alert"
+                  className="field-error flex items-center gap-1.5 mt-2 text-xs"
+                  style={{ color: "#dc2626", fontWeight: 500 }}
+                >
+                  <AlertCircle size={14} />
+                  <span>{fileError}</span>
+                </div>
+              )}
             </div>
 
             {/* JOB DETAILS CARD */}
@@ -801,6 +858,16 @@ export default function DashboardPage() {
                 <p id="job-description-help" className="text-xs text-muted mt-1" style={{ lineHeight: 1.45 }}>
                   Include at least 10 words. For best results, include specific technologies and expected experience levels.
                 </p>
+                {jdError && (
+                  <div
+                    role="alert"
+                    className="field-error flex items-center gap-1.5 mt-1.5 text-xs"
+                    style={{ color: "#dc2626", fontWeight: 500 }}
+                  >
+                    <AlertCircle size={14} />
+                    <span>{jdError}</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between items-center mt-4 flex-wrap gap-2">

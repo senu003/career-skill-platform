@@ -657,7 +657,7 @@ async def analyze_cv(
             mark_analysis_request_failed(idempotency_record.id)
         if isinstance(provider_err, HTTPException):
             raise provider_err
-        raise HTTPException(status_code=502, detail=f"AI provider evaluation failed: {provider_err}")
+        raise HTTPException(status_code=502, detail="The AI analysis service is temporarily unavailable. Please try again in a few moments.")
 
     # 6. ATOMIC WRITE TRANSACTION for CV, Job, Analysis, and Idempotency
     idempotency_id = idempotency_record.id if idempotency_record else None
@@ -766,4 +766,4 @@ async def analyze_cv(
             mark_analysis_request_failed(idempotency_id)
         if isinstance(ex, HTTPException):
             raise ex
-        raise HTTPException(status_code=500, detail=f"Database write transaction failed: {ex}")
+        raise HTTPException(status_code=500, detail="Failed to save analysis results due to an internal error.")
