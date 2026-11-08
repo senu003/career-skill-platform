@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import os
 import json
 import hashlib
@@ -276,6 +278,14 @@ def evaluate_cv_with_gemini(cv_text: str, requirements: list, mock: bool = False
 
     if not cleaned_reqs:
         return []
+
+    if os.getenv("SIMULATE_AI_FAILURE", "0").lower() in ("1", "true", "yes"):
+        from fastapi import HTTPException
+        logger.error("SIMULATED OUTAGE: Upstream AI provider is temporarily unavailable (simulation active)")
+        raise HTTPException(
+            status_code=502,
+            detail="Simulated upstream AI provider service outage for Phase 4 verification."
+        )
 
     if not cv_text or not cv_text.strip():
         # Empty CV -> all skills missing

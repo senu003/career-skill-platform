@@ -8,16 +8,29 @@ if os.path.exists(backend_env):
 else:
     load_dotenv(override=True)
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-logger = logging.getLogger(__name__)
+from .observability import (
+    setup_logging,
+    RequestTracingMiddleware,
+    create_error_response,
+    build_cors_headers,
+    get_current_request_id,
+    generate_request_id,
+)
+from .services.readiness_service import perform_readiness_check
 from .database import engine, SessionLocal, Base
 from . import models
 from .auth_deps import validate_jwt_secret
 from .services.seed_questions import seed_assessment_questions
+from .rate_limiter import limiter, RateLimitExceeded, SlowAPIMiddleware
+
 from .routers.auth import router as auth_router
 from .routers.users import router as users_router
 from .routers.cv import router as cv_router
@@ -25,6 +38,10 @@ from .routers.requirements import router as requirements_router
 from .routers.assessment import router as assessment_router
 from .routers.ml import router as ml_router
 from .routers.aggregation import router as aggregation_router
+
+# Initialize structured, sanitized logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 # Enforce JWT secret configuration immediately on startup
 validate_jwt_secret()
@@ -68,9 +85,6 @@ if SEED_ON_STARTUP:
     with SessionLocal() as db_session:
         seed_assessment_questions(db_session)
 
-from fastapi.middleware.cors import CORSMiddleware
-from app.rate_limiter import limiter, RateLimitExceeded, SlowAPIMiddleware
-
 app = FastAPI(
     title="Career Skill Intelligence Platform",
     description="AI-powered career & skill gap analysis platform",
@@ -78,6 +92,9 @@ app = FastAPI(
 )
 
 app.state.limiter = limiter
+
+# Middlewares
+app.add_middleware(RequestTracingMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
 frontend_origins_str = os.getenv("FRONTEND_ORIGINS", "")
@@ -89,41 +106,101 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Retry-After"],
 )
 
 
+def _cors_headers_for_request(request: Request) -> dict:
+    """Helper preserving backward-compatibility with existing tests and internal callers."""
+    return build_cors_headers(request)
+
+
+# ---------------------------------------------------------------------------
+# Health & Readiness Probes
+# ---------------------------------------------------------------------------
+
 @app.get("/health")
 def health_check():
+    """
+    Liveness probe: fast, non-blocking check verifying the process is responding.
+    Preserves exact backward-compatibility for existing callers and monitoring.
+    """
     return {"status": "ok", "version": "2.0.0"}
 
+
+@app.get("/ready")
+@app.get("/health/ready")
+def readiness_check(request: Request):
+    """
+    Readiness probe: validates database connectivity, question-bank data availability,
+    configured storage health, and rate limiter status.
+    Returns HTTP 200 on ok/degraded, HTTP 503 if critical dependencies are down.
+    """
+    status_code, payload = perform_readiness_check()
+    req_id = (
+        getattr(request.state, "request_id", None)
+        or get_current_request_id()
+        or generate_request_id()
+    )
+    payload["request_id"] = req_id
+    resp_headers = build_cors_headers(request)
+    resp_headers["X-Request-ID"] = req_id
+    return JSONResponse(status_code=status_code, content=payload, headers=resp_headers)
+
+
+# ---------------------------------------------------------------------------
+# Exception Handlers
+# ---------------------------------------------------------------------------
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     retry_after = getattr(exc, "retry_after", 60)
-    return JSONResponse(
+    return create_error_response(
+        request=request,
         status_code=429,
-        content={"detail": f"Rate limit exceeded: {exc.detail}. Please slow down your requests."},
-        headers={"Retry-After": str(retry_after)}
+        detail=f"Rate limit exceeded: {exc.detail}. Please slow down your requests.",
+        error_code="RATE_LIMIT_EXCEEDED",
+        headers={"Retry-After": str(retry_after)},
     )
 
 
-def _cors_headers_for_request(request: Request) -> dict:
-    origin = request.headers.get("origin")
-    if origin and (origin in frontend_origins or not frontend_origins or "*" in frontend_origins):
-        return {
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true",
-        }
-    return {}
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    messages = []
+    for err in errors:
+        loc = " -> ".join(str(l) for l in err.get("loc", []))
+        msg = err.get("msg", "Invalid value")
+        messages.append(f"{loc}: {msg}" if loc else msg)
+    detail_msg = "; ".join(messages) if messages else "Invalid request data"
+
+    return create_error_response(
+        request=request,
+        status_code=422,
+        detail=detail_msg,
+        error_code="VALIDATION_ERROR",
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return create_error_response(
+        request=request,
+        status_code=exc.status_code,
+        detail=exc.detail,
+        headers=getattr(exc, "headers", None),
+    )
 
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
-    logger.error(f"Database error: {exc}")
-    return JSONResponse(
+    req_id = getattr(request.state, "request_id", None) or get_current_request_id()
+    logger.error(f"Database error [request_id={req_id}]: {exc}", exc_info=True)
+    return create_error_response(
+        request=request,
         status_code=500,
-        content={"detail": "Internal server error"},
-        headers=_cors_headers_for_request(request),
+        detail="Internal server error",
+        error_code="DATABASE_ERROR",
     )
 
 
@@ -131,18 +208,24 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
 async def global_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, (HTTPException, RateLimitExceeded)):
         raise exc
-    logger.error(f"Unexpected error: {exc}")
-    return JSONResponse(
+    req_id = getattr(request.state, "request_id", None) or get_current_request_id()
+    logger.error(f"Unexpected error [request_id={req_id}]: {exc}", exc_info=True)
+    return create_error_response(
+        request=request,
         status_code=500,
-        content={"detail": "Internal server error"},
-        headers=_cors_headers_for_request(request),
+        detail="Internal server error",
+        error_code="INTERNAL_SERVER_ERROR",
     )
 
 
-# New versioned auth routes (recommended)
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+
+# Versioned auth routes
 app.include_router(auth_router)
 
-# Legacy routes kept for backward compat with existing frontend calls
+# Application routes
 app.include_router(users_router)
 app.include_router(cv_router)
 app.include_router(requirements_router)
