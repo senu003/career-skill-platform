@@ -204,8 +204,7 @@ def get_safe_error_message(status_code: int, detail: Any) -> str:
         return "The AI analysis service is temporarily unavailable. Please try again in a few moments."
 
     if status_code == 503:
-        # Allow readiness failure details through if they are structured messages
-        if isinstance(detail, str) and ("service unavailable" in detail.lower() or "readiness" in detail.lower()):
+        if isinstance(detail, str) and detail.strip():
             return detail
         return "Service temporarily unavailable. Please try again later."
 

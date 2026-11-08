@@ -24,6 +24,12 @@ from app.services.storage_service import LocalStorageBackend
 client = TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture(autouse=True)
+def clean_app_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
 # ===========================================================================
 # 1. REQUEST ID VALIDATION, BOUNDING & TRACING
 # ===========================================================================
@@ -281,55 +287,61 @@ def test_readiness_avoids_live_ai_calls():
 
 
 def test_simulated_ai_provider_failure_returns_safe_502():
-    with patch.dict("os.environ", {"SIMULATE_AI_FAILURE": "1"}):
-        from app.auth_deps import get_current_user
-        from app.models import User
-        mock_user = User(id=1, email="test@test.com")
-        app.dependency_overrides[get_current_user] = lambda: mock_user
+    from app.rate_limiter import limiter
+    limiter_was_enabled = getattr(limiter, "enabled", True)
+    limiter.enabled = False
+    try:
+        with patch.dict("os.environ", {"SIMULATE_AI_FAILURE": "1"}):
+            from app.auth_deps import get_current_user
+            from app.models import User
+            mock_user = User(id=1, email="test@test.com", is_active=True)
+            app.dependency_overrides[get_current_user] = lambda: mock_user
 
-        mock_cv_data = {
-            "text": "Experienced Python Engineer with FastAPI and Docker.",
-            "filename": "test_resume.pdf",
-            "file_path": "uploads/test_resume.pdf",
-        }
-        with patch("app.routers.cv.process_cv", return_value=mock_cv_data):
-            resp = client.post(
-                "/cv/analyze",
-                files={"file": ("test_resume.pdf", b"%PDF-1.4 dummy", "application/pdf")},
-                data={"requirements": '[{"skill": "Python", "level": "intermediate", "importance": "required"}]'},
-                headers={"X-Request-ID": "test-trace-sim-502"},
-            )
-            assert resp.status_code == 502
-            data = resp.json()
-            assert data["error_code"] == "AI_PROVIDER_ERROR"
-            assert data["detail"] == "The AI analysis service is temporarily unavailable. Please try again in a few moments."
-            assert data["request_id"] == "test-trace-sim-502"
-            assert resp.headers.get("x-request-id") == "test-trace-sim-502"
-            assert "Simulated" not in data["detail"]
+            mock_cv_data = {
+                "text": "Experienced Python Engineer with FastAPI and Docker.",
+                "filename": "test_resume.pdf",
+                "file_path": "uploads/test_resume.pdf",
+            }
+            with patch("app.routers.cv.process_cv", return_value=mock_cv_data):
+                resp = client.post(
+                    "/cv/analyze",
+                    files={"file": ("test_resume.pdf", b"%PDF-1.4 dummy", "application/pdf")},
+                    data={"requirements": '[{"skill": "Python", "level": "intermediate", "importance": "required"}]'},
+                    headers={"X-Request-ID": "test-trace-sim-502"},
+                )
+                assert resp.status_code == 502
+                data = resp.json()
+                assert data["error_code"] == "AI_PROVIDER_ERROR"
+                assert data["detail"] == "The AI analysis service is temporarily unavailable. Please try again in a few moments."
+                assert data["request_id"] == "test-trace-sim-502"
+                assert resp.headers.get("x-request-id") == "test-trace-sim-502"
+                assert "Simulated" not in data["detail"]
+    finally:
         app.dependency_overrides.pop(get_current_user, None)
+        limiter.enabled = limiter_was_enabled
 
 
 def test_403_forbidden_returns_consistent_error():
     from app.auth_deps import get_current_user_required
     from app.models import User, CV
 
-    mock_user_b = User(id=999, email="other_user@test.com")
+    mock_user_b = User(id=999, email="other_user@test.com", is_active=True)
     app.dependency_overrides[get_current_user_required] = lambda: mock_user_b
+    try:
+        mock_cv = MagicMock(spec=CV)
+        mock_cv.id = 123
+        mock_cv.user_id = 100  # belongs to user 100, not 999!
 
-    mock_cv = MagicMock(spec=CV)
-    mock_cv.id = 123
-    mock_cv.user_id = 100  # belongs to user 100, not 999!
+        with patch("sqlalchemy.orm.Session.query") as mock_query:
+            mock_filter = MagicMock()
+            mock_filter.first.return_value = mock_cv
+            mock_query.return_value.filter.return_value = mock_filter
 
-    with patch("sqlalchemy.orm.Session.query") as mock_query:
-        mock_filter = MagicMock()
-        mock_filter.first.return_value = mock_cv
-        mock_query.return_value.filter.return_value = mock_filter
-
-        resp = client.get("/cv/123/download")
-        assert resp.status_code == 403
-        data = resp.json()
-        assert data["error_code"] == "FORBIDDEN"
-        assert "request_id" in data
-        assert resp.headers.get("x-request-id") == data["request_id"]
-
-    app.dependency_overrides.pop(get_current_user_required, None)
+            resp = client.get("/cv/123/download")
+            assert resp.status_code == 403
+            data = resp.json()
+            assert data["error_code"] == "FORBIDDEN"
+            assert "request_id" in data
+            assert resp.headers.get("x-request-id") == data["request_id"]
+    finally:
+        app.dependency_overrides.pop(get_current_user_required, None)

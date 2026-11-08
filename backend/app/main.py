@@ -8,7 +8,7 @@ if os.path.exists(backend_env):
 else:
     load_dotenv(override=True)
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -206,7 +206,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    if isinstance(exc, (HTTPException, RateLimitExceeded)):
+    if isinstance(exc, (HTTPException, StarletteHTTPException, RateLimitExceeded)):
         raise exc
     req_id = getattr(request.state, "request_id", None) or get_current_request_id()
     logger.error(f"Unexpected error [request_id={req_id}]: {exc}", exc_info=True)
